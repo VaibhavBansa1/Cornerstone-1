@@ -129,3 +129,79 @@ def test_crawl_stays_in_scope_and_visits_each_url_once(tmp_path, monkeypatch):
         assert n == 1, f"{url} was fetched {n} times, expected exactly once"
 
     assert len(crawler.visited_pages) == 2
+
+
+def test_crawl_follows_department_nav_outside_path_prefix_and_ignores_global_chrome(tmp_path, monkeypatch):
+    """Regression test for the real site's structure: most department pages
+    (syllabus, faculty, ...) live at root-level URLs outside ALLOWED_PATH_PREFIX,
+    linked only from the department's own sidebar <nav aria-label="...">.
+    Meanwhile a site-wide mega-menu link (outside #sp-main-body) must NOT be
+    treated as in-scope just because it's same-domain.
+    """
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_PAGES_DIR", tmp_path / "raw" / "pages")
+    monkeypatch.setattr(config, "RAW_ASSETS_DIR", tmp_path / "raw" / "assets")
+    monkeypatch.setattr(config, "MANIFEST_PATH", tmp_path / "manifest.json")
+    monkeypatch.setattr(config, "RESPECT_ROBOTS_TXT", False)
+    monkeypatch.setattr(config, "REQUEST_DELAY_SECONDS", 0)
+    monkeypatch.setattr(config, "MAX_PAGES", 50)
+
+    home_html = f"""
+    <html><head><title>IT Dept Home</title></head>
+    <body>
+      <nav aria-label="Site mega menu">
+        <a href="https://{DOMAIN}/images/mainmenu/hostel/SoP.pdf">Hostel SOP (global, out of scope)</a>
+        <a href="https://{DOMAIN}/some-other-department-page">Some other department (global, out of scope)</a>
+      </nav>
+      <section id="sp-main-body">
+        <aside>
+          <nav aria-label="Department of Information Technology">
+            <a href="/syllabus-it">Syllabus</a>
+            <a href="/faculty-profiles-it-2">Faculty Profiles</a>
+          </nav>
+        </aside>
+      </section>
+    </body></html>
+    """
+    syllabus_html = """
+    <html><head><title>Syllabus</title></head>
+    <body>
+      <section id="sp-main-body">
+        <a href="/images/Departments/information_technology/syllabus.pdf">Syllabus PDF</a>
+      </section>
+    </body></html>
+    """
+    faculty_html = """
+    <html><head><title>Faculty Profiles</title></head>
+    <body><section id="sp-main-body"><p>Faculty list here.</p></section></body></html>
+    """
+
+    routes = {
+        BASE: FakeResponse(text=home_html),
+        f"https://{DOMAIN}/syllabus-it": FakeResponse(text=syllabus_html),
+        f"https://{DOMAIN}/faculty-profiles-it-2": FakeResponse(text=faculty_html),
+        f"https://{DOMAIN}/images/Departments/information_technology/syllabus.pdf": FakeResponse(
+            content=b"%PDF-fake", headers={"Content-Type": "application/pdf"}
+        ),
+    }
+
+    session = FakeSession(routes)
+    crawler = ScopedCrawler(session=session)
+    manifest = crawler.crawl(start_url=BASE)
+
+    page_urls = {p["url"] for p in manifest.pages}
+    assert page_urls == {
+        normalize_url(BASE),
+        normalize_url(f"https://{DOMAIN}/syllabus-it"),
+        normalize_url(f"https://{DOMAIN}/faculty-profiles-it-2"),
+    }
+
+    # The global mega-menu link/asset (outside #sp-main-body) must never be
+    # fetched, even though it's same-domain.
+    assert f"https://{DOMAIN}/images/mainmenu/hostel/SoP.pdf" not in session.requested
+    assert f"https://{DOMAIN}/some-other-department-page" not in session.requested
+
+    # The syllabus PDF, found inside #sp-main-body on an in-scope page, must
+    # be downloaded.
+    asset_urls = {a["url"] for a in manifest.assets}
+    assert asset_urls == {f"https://{DOMAIN}/images/Departments/information_technology/syllabus.pdf"}

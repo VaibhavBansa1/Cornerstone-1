@@ -14,6 +14,23 @@ ALLOWED_PATH_PREFIX = "/academics/departments/information-technology"
 
 START_URL = f"https://{ALLOWED_DOMAIN}{ALLOWED_PATH_PREFIX}"
 
+# This site (Joomla) does NOT nest all department content under
+# ALLOWED_PATH_PREFIX -- most sub-pages (syllabus, faculty, time table,
+# downloads, ...) are published as root-level slugs like "/syllabus-it",
+# linked only from the department's own sidebar menu. That sidebar is
+# rendered as a <nav aria-label="..."> on every department page, so links
+# found inside it are treated as in-scope even when their URL doesn't share
+# ALLOWED_PATH_PREFIX. Set this to the aria-label used by the target
+# department's nav (view the page source's <aside id="sp-left"> to find it).
+DEPARTMENT_NAV_ARIA_LABEL = "Department of Information Technology"
+
+# Link/asset discovery is restricted to this container id so site-wide
+# chrome (top mega-menu, footer "quick links" widgets linking to unrelated
+# hostel/NAAC/brochure PDFs etc.) is never treated as in-scope just because
+# it happens to be on the same domain. Falls back to the whole page if the
+# id isn't found (e.g. site structure changed, or a different site).
+MAIN_CONTENT_CONTAINER_ID = "sp-main-body"
+
 # Respect robots.txt rules for ALLOWED_DOMAIN.
 RESPECT_ROBOTS_TXT = True
 
