@@ -119,12 +119,13 @@ def build_chunks() -> list[dict]:
         kind = media_kind_by_ext.get(ext, "document")
         local_path = config.DATA_DIR / asset["local_path"]
         referring_title = page_title_by_url.get(asset["referenced_from"], "")
+        display_name = asset.get("original_filename") or local_path.name
 
         if kind == "document" and ext == ".pdf" and local_path.exists():
             text = pdf_to_text(local_path)
             pieces = chunk_text(text) if text.strip() else []
             if not pieces:
-                pieces = [f"PDF document '{local_path.name}' referenced from page '{referring_title}'."]
+                pieces = [f"PDF document '{display_name}' referenced from page '{referring_title}'."]
             for i, piece in enumerate(pieces):
                 chunks.append(
                     {
@@ -139,7 +140,7 @@ def build_chunks() -> list[dict]:
                 )
         else:
             description = (
-                f"{kind.capitalize()} file '{local_path.name}' "
+                f"{kind.capitalize()} file '{display_name}' "
                 f"referenced from page '{referring_title}' ({asset['referenced_from']})."
             )
             chunks.append(

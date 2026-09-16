@@ -15,12 +15,17 @@ Design goals (per project requirements):
   * Persist every page (raw HTML) and every asset (PDF/image/audio/video)
     referenced from within scope to disk, plus a manifest describing what
     was collected and where it came from.
+  * Some department content (e.g. timetables) is published as individual
+    public Google Drive files rather than hosted on the site itself. These
+    are resolved to a direct-download URL and fetched as *assets* only --
+    Drive is never crawled as if it were another page on the site.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import re
 import time
 import urllib.robotparser
 from collections import deque
@@ -70,6 +75,35 @@ def slugify_for_filename(url: str) -> str:
     slug = (parsed.path.strip("/") or "index").replace("/", "__")
     digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
     return f"{slug}__{digest}"
+
+
+_GOOGLE_DRIVE_HOSTS = {"drive.google.com"}
+_GOOGLE_DRIVE_ID_PATTERNS = [
+    re.compile(r"/file/d/([\w-]{10,})"),
+    re.compile(r"[?&]id=([\w-]{10,})"),
+]
+
+
+def extract_google_drive_file_id(url: str) -> str | None:
+    """Pull the file id out of a "view"/"open" Google Drive share link."""
+    if urlparse(url).netloc.lower() not in _GOOGLE_DRIVE_HOSTS:
+        return None
+    for pattern in _GOOGLE_DRIVE_ID_PATTERNS:
+        m = pattern.search(url)
+        if m:
+            return m.group(1)
+    return None
+
+
+def google_drive_direct_download_url(file_id: str) -> str:
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+
+def filename_from_content_disposition(header: str) -> str | None:
+    if not header:
+        return None
+    m = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)\"?", header)
+    return m.group(1) if m else None
 
 
 @dataclass
@@ -232,6 +266,15 @@ class ScopedCrawler:
 
         for href in candidates:
             absolute = normalize_url(urljoin(page_url, href))
+
+            drive_id = extract_google_drive_file_id(absolute)
+            if drive_id:
+                if drive_id in self.downloaded_assets:
+                    continue
+                self.downloaded_assets.add(drive_id)
+                self._download_google_drive_asset(drive_id, page_url)
+                continue
+
             ext = asset_extension(absolute)
             if not ext:
                 continue
@@ -242,6 +285,58 @@ class ScopedCrawler:
                 continue
             self.downloaded_assets.add(absolute)
             self._download_asset(absolute, ext, page_url)
+
+    def _download_google_drive_asset(self, file_id: str, referenced_from: str):
+        download_url = google_drive_direct_download_url(file_id)
+        try:
+            resp = self.session.get(download_url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=True)
+        except requests.RequestException as exc:
+            log.warning("Failed to fetch Google Drive file %s: %s", file_id, exc)
+            return
+        time.sleep(config.REQUEST_DELAY_SECONDS)
+        if resp.status_code != 200:
+            log.warning("Google Drive file %s returned status %s", file_id, resp.status_code)
+            return
+
+        content_type = resp.headers.get("Content-Type", "")
+        if "text/html" in content_type:
+            # Large files (~25MB+) serve an HTML "can't scan for viruses"
+            # interstitial requiring a confirm token instead of the file
+            # itself. Not handled -- department timetables/notices are small.
+            log.warning(
+                "Google Drive file %s returned an HTML page instead of the "
+                "file (likely the large-file virus-scan interstitial); skipping.",
+                file_id,
+            )
+            return
+
+        filename = filename_from_content_disposition(resp.headers.get("Content-Disposition", ""))
+        ext = Path(filename).suffix.lower() if filename else ""
+        if ext not in config.ASSET_EXTENSIONS:
+            log.info(
+                "Skipping Google Drive file %s: unrecognized/missing extension %r (filename=%r)",
+                file_id, ext, filename,
+            )
+            return
+
+        local_name = slugify_for_filename(download_url) + ext
+        local_path = config.RAW_ASSETS_DIR / local_name
+        with open(local_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                f.write(chunk)
+
+        log.info("Downloaded Google Drive asset: %s (%s) -> %s", file_id, filename, local_path.name)
+        self.manifest.assets.append(
+            {
+                "url": f"https://drive.google.com/file/d/{file_id}/view",
+                "extension": ext,
+                "local_path": str(local_path.relative_to(config.DATA_DIR)),
+                "referenced_from": referenced_from,
+                "content_type": content_type,
+                "size_bytes": local_path.stat().st_size,
+                "original_filename": filename,
+            }
+        )
 
     def _download_asset(self, url: str, ext: str, referenced_from: str):
         try:
