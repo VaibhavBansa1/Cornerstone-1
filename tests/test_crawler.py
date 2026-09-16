@@ -9,7 +9,12 @@ Verifies:
   * off-domain links/assets are never fetched
 """
 import config
-from scraper.crawler import ScopedCrawler, is_in_crawl_scope, normalize_url
+from scraper.crawler import (
+    ScopedCrawler,
+    extract_google_drive_file_id,
+    is_in_crawl_scope,
+    normalize_url,
+)
 
 
 class FakeResponse:
@@ -205,3 +210,67 @@ def test_crawl_follows_department_nav_outside_path_prefix_and_ignores_global_chr
     # be downloaded.
     asset_urls = {a["url"] for a in manifest.assets}
     assert asset_urls == {f"https://{DOMAIN}/images/Departments/information_technology/syllabus.pdf"}
+
+
+def test_extract_google_drive_file_id():
+    assert (
+        extract_google_drive_file_id("https://drive.google.com/file/d/1KR51f6myf6RJIIFQIqGBB8cG_12LyLHK/view?usp=sharing")
+        == "1KR51f6myf6RJIIFQIqGBB8cG_12LyLHK"
+    )
+    assert (
+        extract_google_drive_file_id("https://drive.google.com/open?id=1KR51f6myf6RJIIFQIqGBB8cG_12LyLHK")
+        == "1KR51f6myf6RJIIFQIqGBB8cG_12LyLHK"
+    )
+    assert extract_google_drive_file_id("https://docs.google.com/spreadsheets/d/abc/edit") is None
+    assert extract_google_drive_file_id(f"https://{DOMAIN}/downloads-it") is None
+
+
+def test_crawl_downloads_public_google_drive_file_referenced_by_page(tmp_path, monkeypatch):
+    """Regression test: the real site publishes timetables as "View More
+    Details" links to individually-shared Google Drive files rather than
+    hosting the PDFs itself. These must be resolved to a direct-download URL
+    and saved as assets -- without ever being queued as a crawlable page.
+    """
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_PAGES_DIR", tmp_path / "raw" / "pages")
+    monkeypatch.setattr(config, "RAW_ASSETS_DIR", tmp_path / "raw" / "assets")
+    monkeypatch.setattr(config, "MANIFEST_PATH", tmp_path / "manifest.json")
+    monkeypatch.setattr(config, "RESPECT_ROBOTS_TXT", False)
+    monkeypatch.setattr(config, "REQUEST_DELAY_SECONDS", 0)
+    monkeypatch.setattr(config, "MAX_PAGES", 50)
+
+    drive_id = "1KR51f6myf6RJIIFQIqGBB8cG_12LyLHK"
+    home_html = f"""
+    <html><head><title>IT Dept Home</title></head>
+    <body>
+      <section id="sp-main-body">
+        <p>B.Tech I Semester:
+          <a href="https://drive.google.com/file/d/{drive_id}/view?usp=sharing">View More Details</a>
+        </p>
+      </section>
+    </body></html>
+    """
+    routes = {
+        BASE: FakeResponse(text=home_html),
+        f"https://drive.google.com/uc?export=download&id={drive_id}": FakeResponse(
+            content=b"%PDF-faketimetable",
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Disposition": 'attachment; filename="B.Tech I Sem TimeTable.pdf"',
+            },
+        ),
+    }
+
+    session = FakeSession(routes)
+    crawler = ScopedCrawler(session=session)
+    manifest = crawler.crawl(start_url=BASE)
+
+    # Drive was never queued/fetched as a page.
+    assert {p["url"] for p in manifest.pages} == {normalize_url(BASE)}
+
+    assert len(manifest.assets) == 1
+    asset = manifest.assets[0]
+    assert asset["extension"] == ".pdf"
+    assert asset["original_filename"] == "B.Tech I Sem TimeTable.pdf"
+    saved = tmp_path / asset["local_path"]
+    assert saved.read_bytes() == b"%PDF-faketimetable"
