@@ -111,6 +111,11 @@ class Manifest:
     pages: list = field(default_factory=list)
     assets: list = field(default_factory=list)
     skipped_out_of_scope: list = field(default_factory=list)
+    # Every link/asset that was in scope but couldn't actually be fetched:
+    # dead links, timeouts, non-200 responses, unreadable Google Drive
+    # files. Persisted here (not just logged) so a re-crawl gives you a
+    # structured list to review instead of console output.
+    failed: list = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(
@@ -118,6 +123,7 @@ class Manifest:
                 "pages": self.pages,
                 "assets": self.assets,
                 "skipped_out_of_scope": self.skipped_out_of_scope,
+                "failed": self.failed,
             },
             indent=2,
             ensure_ascii=False,
@@ -188,11 +194,19 @@ class ScopedCrawler:
                 resp = self.session.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS)
             except requests.RequestException as exc:
                 log.warning("Failed to fetch %s: %s", url, exc)
+                self.manifest.failed.append({"url": url, "kind": "page", "reason": str(exc)})
                 continue
             time.sleep(config.REQUEST_DELAY_SECONDS)
 
             content_type = resp.headers.get("Content-Type", "")
             if resp.status_code != 200 or "text/html" not in content_type:
+                self.manifest.failed.append(
+                    {
+                        "url": url,
+                        "kind": "page",
+                        "reason": f"status {resp.status_code}, content-type {content_type!r}",
+                    }
+                )
                 continue
 
             html = resp.text
@@ -225,10 +239,11 @@ class ScopedCrawler:
         config.DATA_DIR.mkdir(parents=True, exist_ok=True)
         config.MANIFEST_PATH.write_text(self.manifest.to_json(), encoding="utf-8")
         log.info(
-            "Crawl finished: %d pages, %d assets, %d skipped-out-of-scope.",
+            "Crawl finished: %d pages, %d assets, %d skipped-out-of-scope, %d failed.",
             len(self.manifest.pages),
             len(self.manifest.assets),
             len(self.manifest.skipped_out_of_scope),
+            len(self.manifest.failed),
         )
         return self.manifest
 
@@ -287,15 +302,27 @@ class ScopedCrawler:
             self._download_asset(absolute, ext, page_url)
 
     def _download_google_drive_asset(self, file_id: str, referenced_from: str):
+        drive_view_url = f"https://drive.google.com/file/d/{file_id}/view"
         download_url = google_drive_direct_download_url(file_id)
         try:
             resp = self.session.get(download_url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=True)
         except requests.RequestException as exc:
             log.warning("Failed to fetch Google Drive file %s: %s", file_id, exc)
+            self.manifest.failed.append(
+                {"url": drive_view_url, "kind": "drive", "reason": str(exc), "referenced_from": referenced_from}
+            )
             return
         time.sleep(config.REQUEST_DELAY_SECONDS)
         if resp.status_code != 200:
             log.warning("Google Drive file %s returned status %s", file_id, resp.status_code)
+            self.manifest.failed.append(
+                {
+                    "url": drive_view_url,
+                    "kind": "drive",
+                    "reason": f"status {resp.status_code}",
+                    "referenced_from": referenced_from,
+                }
+            )
             return
 
         content_type = resp.headers.get("Content-Type", "")
@@ -308,6 +335,14 @@ class ScopedCrawler:
                 "file (likely the large-file virus-scan interstitial); skipping.",
                 file_id,
             )
+            self.manifest.failed.append(
+                {
+                    "url": drive_view_url,
+                    "kind": "drive",
+                    "reason": "virus-scan interstitial (file likely >25MB)",
+                    "referenced_from": referenced_from,
+                }
+            )
             return
 
         filename = filename_from_content_disposition(resp.headers.get("Content-Disposition", ""))
@@ -316,6 +351,14 @@ class ScopedCrawler:
             log.info(
                 "Skipping Google Drive file %s: unrecognized/missing extension %r (filename=%r)",
                 file_id, ext, filename,
+            )
+            self.manifest.failed.append(
+                {
+                    "url": drive_view_url,
+                    "kind": "drive",
+                    "reason": f"unrecognized/missing extension {ext!r} (filename={filename!r})",
+                    "referenced_from": referenced_from,
+                }
             )
             return
 
@@ -343,10 +386,21 @@ class ScopedCrawler:
             resp = self.session.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=True)
         except requests.RequestException as exc:
             log.warning("Failed to fetch asset %s: %s", url, exc)
+            self.manifest.failed.append(
+                {"url": url, "kind": "asset", "reason": str(exc), "referenced_from": referenced_from}
+            )
             return
         time.sleep(config.REQUEST_DELAY_SECONDS)
         if resp.status_code != 200:
             log.warning("Asset %s returned status %s", url, resp.status_code)
+            self.manifest.failed.append(
+                {
+                    "url": url,
+                    "kind": "asset",
+                    "reason": f"status {resp.status_code}",
+                    "referenced_from": referenced_from,
+                }
+            )
             return
 
         local_name = slugify_for_filename(url) + ext

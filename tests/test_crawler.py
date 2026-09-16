@@ -274,3 +274,46 @@ def test_crawl_downloads_public_google_drive_file_referenced_by_page(tmp_path, m
     assert asset["original_filename"] == "B.Tech I Sem TimeTable.pdf"
     saved = tmp_path / asset["local_path"]
     assert saved.read_bytes() == b"%PDF-faketimetable"
+
+
+def test_failures_are_recorded_in_manifest_not_just_logged(tmp_path, monkeypatch):
+    """Dead links, non-200 assets, and unreadable Google Drive files must
+    show up in manifest["failed"] so they can be reviewed after the fact,
+    not just printed to the console during the crawl.
+    """
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_PAGES_DIR", tmp_path / "raw" / "pages")
+    monkeypatch.setattr(config, "RAW_ASSETS_DIR", tmp_path / "raw" / "assets")
+    monkeypatch.setattr(config, "MANIFEST_PATH", tmp_path / "manifest.json")
+    monkeypatch.setattr(config, "RESPECT_ROBOTS_TXT", False)
+    monkeypatch.setattr(config, "REQUEST_DELAY_SECONDS", 0)
+    monkeypatch.setattr(config, "MAX_PAGES", 50)
+
+    drive_id = "1e9QO29kOgby-gqQi8ofmw9VIVlvTWeIa"
+    home_html = f"""
+    <html><head><title>IT Dept Home</title></head>
+    <body>
+      <section id="sp-main-body">
+        <a href="https://{DOMAIN}/images/gallery/missing.jpeg">Missing image</a>
+        <a href="https://drive.google.com/file/d/{drive_id}/view?usp=sharing">Big Drive file</a>
+      </section>
+    </body></html>
+    """
+    routes = {
+        BASE: FakeResponse(text=home_html),
+        f"https://{DOMAIN}/images/gallery/missing.jpeg": FakeResponse(status_code=404),
+        f"https://drive.google.com/uc?export=download&id={drive_id}": FakeResponse(
+            status_code=200,
+            content=b"<html>Google Drive can't scan this file for viruses.</html>",
+            headers={"Content-Type": "text/html; charset=utf-8"},
+        ),
+    }
+
+    session = FakeSession(routes)
+    crawler = ScopedCrawler(session=session)
+    manifest = crawler.crawl(start_url=BASE)
+
+    assert len(manifest.assets) == 0
+    failed_by_kind = {f["kind"]: f for f in manifest.failed}
+    assert failed_by_kind["asset"]["reason"] == "status 404"
+    assert "interstitial" in failed_by_kind["drive"]["reason"]
