@@ -46,6 +46,36 @@ generation (RAG) query pipeline.
 
 ## Usage
 
+### With uv (recommended)
+
+[uv](https://docs.astral.sh/uv/) manages the virtualenv and dependencies
+from `pyproject.toml`/`uv.lock` for you -- no manual `venv`/`pip` steps.
+
+```bash
+uv sync                        # core deps only
+uv sync --extra anthropic      # + Anthropic SDK
+uv sync --extra openai         # + OpenAI SDK (also covers OpenAI-compatible local servers)
+uv sync --extra gemini         # + Gemini SDK
+uv sync --all-extras           # all three generation backends
+uv sync --group dev            # add pytest for running the test suite
+
+# One-shot: crawl -> ingest -> embed & index
+uv run run_pipeline.py
+
+# Ask a question
+uv run -m rag.pipeline "What programs does the IT department offer?"
+
+# Run tests
+uv run pytest tests/ -q
+```
+
+`uv run` transparently uses the `.venv` uv manages, so there's nothing to
+activate manually. Add a new dependency with `uv add <package>` (or
+`uv add --optional openai <package>` for an extras group) -- it updates
+both `pyproject.toml` and `uv.lock`.
+
+### With pip
+
 ```bash
 pip install -r requirements.txt   # or just the SDK for the backend you use, see below
 
