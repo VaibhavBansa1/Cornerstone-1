@@ -1,0 +1,9 @@
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+pypdf>=4.0
+sentence-transformers>=3.0
+faiss-cpu>=1.8
+numpy>=1.26
+anthropic>=0.40
+pytest>=8.0
