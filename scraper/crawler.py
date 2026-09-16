@@ -2,8 +2,14 @@
 
 Design goals (per project requirements):
   * Only ever touch ``config.ALLOWED_DOMAIN``.
-  * Only follow links for further crawling that stay under
-    ``config.ALLOWED_PATH_PREFIX`` (the IT department subtree).
+  * Only follow links for further crawling that are genuinely part of the
+    department: either under ``config.ALLOWED_PATH_PREFIX``, or found
+    inside the department's own sidebar nav (``config.DEPARTMENT_NAV_ARIA_LABEL``)
+    -- this site publishes most department sub-pages as root-level slugs
+    (e.g. "/syllabus-it") that share no URL prefix with the seed page.
+  * Never treat site-wide chrome (top mega-menu, footer "quick links"
+    widgets) as in-scope just because it's on the same domain -- link/asset
+    discovery is restricted to ``config.MAIN_CONTENT_CONTAINER_ID``.
   * Visit every URL at most once -- no re-queueing, no re-fetching, so a
     cyclic link graph can never turn into an infinite loop.
   * Persist every page (raw HTML) and every asset (PDF/image/audio/video)
@@ -90,6 +96,7 @@ class ScopedCrawler:
         self.session.headers.update({"User-Agent": config.USER_AGENT})
         self.visited_pages: set[str] = set()
         self.downloaded_assets: set[str] = set()
+        self.in_scope_urls: set[str] = set()
         self.manifest = Manifest()
         self._robots = None
         if config.RESPECT_ROBOTS_TXT:
@@ -113,8 +120,10 @@ class ScopedCrawler:
         config.RAW_PAGES_DIR.mkdir(parents=True, exist_ok=True)
         config.RAW_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
-        queue: deque[str] = deque([normalize_url(start_url)])
-        queued: set[str] = {normalize_url(start_url)}
+        start_norm = normalize_url(start_url)
+        queue: deque[str] = deque([start_norm])
+        queued: set[str] = {start_norm}
+        self.in_scope_urls.add(start_norm)
 
         while queue:
             if len(self.visited_pages) >= config.MAX_PAGES:
@@ -128,7 +137,12 @@ class ScopedCrawler:
             # even on redirect loops or fetch errors.
             self.visited_pages.add(url)
 
-            if not is_in_crawl_scope(url):
+            # Scope was already decided when this URL was discovered (see
+            # _extract_and_queue_links): either it matched ALLOWED_PATH_PREFIX,
+            # or it was found inside the department's own sidebar nav. This
+            # re-check just guards against anything slipping into the queue
+            # some other way.
+            if url not in self.in_scope_urls:
                 self.manifest.skipped_out_of_scope.append(url)
                 continue
             if not self._robots_allows(url):
@@ -162,8 +176,17 @@ class ScopedCrawler:
                 }
             )
 
-            self._extract_and_queue_links(soup, url, queue, queued)
-            self._extract_and_download_assets(soup, url)
+            main_scope = soup.find(id=config.MAIN_CONTENT_CONTAINER_ID) or soup
+            if main_scope is soup:
+                log.warning(
+                    "Container #%s not found on %s; falling back to the whole "
+                    "page for link/asset discovery (site-wide chrome may leak in).",
+                    config.MAIN_CONTENT_CONTAINER_ID,
+                    url,
+                )
+
+            self._extract_and_queue_links(main_scope, url, queue, queued)
+            self._extract_and_download_assets(main_scope, url)
 
         config.DATA_DIR.mkdir(parents=True, exist_ok=True)
         config.MANIFEST_PATH.write_text(self.manifest.to_json(), encoding="utf-8")
@@ -175,24 +198,33 @@ class ScopedCrawler:
         )
         return self.manifest
 
-    def _extract_and_queue_links(self, soup, page_url, queue, queued):
-        for a in soup.find_all("a", href=True):
+    def _extract_and_queue_links(self, main_scope, page_url, queue, queued):
+        dept_nav = main_scope.find("nav", attrs={"aria-label": config.DEPARTMENT_NAV_ARIA_LABEL})
+        dept_nav_urls: set[str] = set()
+        if dept_nav:
+            for a in dept_nav.find_all("a", href=True):
+                dept_nav_urls.add(normalize_url(urljoin(page_url, a["href"])))
+
+        for a in main_scope.find_all("a", href=True):
             absolute = normalize_url(urljoin(page_url, a["href"]))
             if asset_extension(absolute):
                 continue  # handled by _extract_and_download_assets
-            if not is_in_crawl_scope(absolute):
+            if not is_allowed_domain(absolute):
                 continue
+            if not (is_in_crawl_scope(absolute) or absolute in dept_nav_urls):
+                continue
+            self.in_scope_urls.add(absolute)
             if absolute in self.visited_pages or absolute in queued:
                 continue
             queued.add(absolute)
             queue.append(absolute)
 
-    def _extract_and_download_assets(self, soup, page_url):
+    def _extract_and_download_assets(self, main_scope, page_url):
         candidates: list[str] = []
-        for a in soup.find_all("a", href=True):
+        for a in main_scope.find_all("a", href=True):
             candidates.append(a["href"])
         for tag, attr in (("img", "src"), ("source", "src"), ("video", "src"), ("audio", "src")):
-            for el in soup.find_all(tag):
+            for el in main_scope.find_all(tag):
                 if el.get(attr):
                     candidates.append(el[attr])
                 if el.get("data-src"):
