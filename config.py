@@ -1,4 +1,5 @@
 """Scope configuration for the MITS IT-department scraper and RAG pipeline."""
+import os
 from pathlib import Path
 
 # --- Crawl scope -------------------------------------------------------
@@ -51,5 +52,26 @@ CHUNK_SIZE_CHARS = 1000
 CHUNK_OVERLAP_CHARS = 150
 TOP_K = 5
 
-# Anthropic model used for answer generation when ANTHROPIC_API_KEY is set.
-GENERATION_MODEL = "claude-sonnet-5"
+# --- Answer generation backend --------------------------------------------
+# Which LLM answers questions using the retrieved context. Leave as "auto" to
+# pick the first available option in this order: anthropic -> openai ->
+# gemini -> ollama (local) -> none (retrieval-only, no generation).
+# Force one explicitly via the RAG_GENERATION_PROVIDER env var, e.g.:
+#   RAG_GENERATION_PROVIDER=ollama
+GENERATION_PROVIDER = os.environ.get("RAG_GENERATION_PROVIDER", "auto")
+
+# Anthropic (used when ANTHROPIC_API_KEY is set)
+GENERATION_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
+
+# OpenAI, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM) when
+# OPENAI_BASE_URL points at it instead of https://api.openai.com/v1.
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")  # None => official OpenAI API
+
+# Gemini (used when GEMINI_API_KEY or GOOGLE_API_KEY is set)
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+
+# Local LLM via Ollama's native API (https://github.com/ollama/ollama) -- no
+# API key needed, just `ollama pull <model>` and `ollama serve` running.
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
