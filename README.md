@@ -41,22 +41,42 @@ generation (RAG) query pipeline.
    with `sentence-transformers/all-MiniLM-L6-v2` (no API key required) and
    builds a FAISS cosine-similarity index in `data/index/`.
 4. **Query** (`rag/pipeline.py`) — embeds the question, retrieves the top-k
-   chunks, and (if `ANTHROPIC_API_KEY` is set) asks Claude to answer using
-   only that retrieved context, citing sources. Without an API key it still
-   works, returning the raw retrieved chunks.
+   chunks, and hands them to a pluggable generation backend that answers
+   using only that retrieved context, citing sources.
 
 ## Usage
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt   # or just the SDK for the backend you use, see below
 
 # One-shot: crawl -> ingest -> embed & index
 python run_pipeline.py
 
 # Ask a question
-export ANTHROPIC_API_KEY=sk-...   # optional, enables generated answers
 python -m rag.pipeline "What programs does the IT department offer?"
 ```
+
+### Choosing a generation backend
+
+Set exactly one of these env vars (or run a local Ollama server) and the
+pipeline auto-detects it, in this priority order: Anthropic → OpenAI →
+Gemini → Ollama. No env var and no local Ollama running means
+retrieval-only mode: it prints the raw matched chunks instead of a
+generated answer.
+
+| Backend | Setup |
+|---|---|
+| Anthropic (Claude) | `export ANTHROPIC_API_KEY=sk-ant-...` |
+| OpenAI | `export OPENAI_API_KEY=sk-...` (override model with `OPENAI_MODEL`) |
+| Local model via an OpenAI-compatible server (LM Studio, llama.cpp, vLLM) | `export OPENAI_API_KEY=anything OPENAI_BASE_URL=http://localhost:1234/v1 OPENAI_MODEL=<your-local-model-name>` |
+| Gemini | `export GEMINI_API_KEY=...` (or `GOOGLE_API_KEY`; override model with `GEMINI_MODEL`) |
+| Local model via Ollama | `ollama pull llama3.1 && ollama serve` (defaults to `http://localhost:11434`, model `llama3.1` — override with `OLLAMA_BASE_URL` / `OLLAMA_MODEL`) |
+
+To force a specific backend instead of auto-detecting, set
+`RAG_GENERATION_PROVIDER` to `anthropic`, `openai`, `gemini`, `ollama`, or
+`none`. You only need to `pip install` the SDK for the backend you
+actually use (`anthropic`, `openai`, or `google-generativeai` — Ollama
+needs none beyond `requests`).
 
 Each stage can also be run independently:
 

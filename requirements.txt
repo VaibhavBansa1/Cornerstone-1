@@ -5,5 +5,12 @@ pypdf>=4.0
 sentence-transformers>=3.0
 faiss-cpu>=1.8
 numpy>=1.26
-anthropic>=0.40
 pytest>=8.0
+
+# --- Answer generation backend: install whichever one(s) you'll use ---
+anthropic>=0.40        # ANTHROPIC_API_KEY
+openai>=1.40            # OPENAI_API_KEY, or any OpenAI-compatible local
+                         # server (LM Studio, llama.cpp, vLLM) via OPENAI_BASE_URL
+google-generativeai>=0.8  # GEMINI_API_KEY / GOOGLE_API_KEY
+# Ollama (local models) needs no extra package -- just `requests` above,
+# plus Ollama itself installed and running (https://ollama.com).
