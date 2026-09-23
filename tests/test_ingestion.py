@@ -75,3 +75,28 @@ def test_build_chunks_covers_pages_pdfs_and_media(tmp_path, monkeypatch):
     image_chunk = next(c for c in chunks if c["source_type"] == "image")
     assert "logo.png" in image_chunk["text"]
     assert "Home" in image_chunk["text"]
+
+
+def test_build_chunks_includes_uploaded_documents(tmp_path, monkeypatch):
+    import zipfile
+
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    (uploads / "exam_rules.txt").write_text("Minimum 75% attendance is required.", encoding="utf-8")
+    with zipfile.ZipFile(uploads / "schedule.docx", "w") as zf:
+        zf.writestr(
+            "word/document.xml",
+            '<w:document><w:body><w:p><w:r><w:t>Mid sem exams start</w:t></w:r>'
+            '<w:r><w:t xml:space="preserve"> on 10 October.</w:t></w:r></w:p></w:body></w:document>',
+        )
+    (uploads / "ignored.exe").write_bytes(b"nope")
+
+    monkeypatch.setattr(config, "UPLOADS_DIR", uploads)
+    monkeypatch.setattr(config, "MANIFEST_PATH", tmp_path / "missing_manifest.json")
+
+    chunks = build_chunks()
+    by_title = {c["title"]: c for c in chunks}
+    assert set(by_title) == {"exam_rules", "schedule"}
+    assert by_title["schedule"]["text"] == "Mid sem exams start on 10 October."
+    assert by_title["exam_rules"]["source_url"] == "upload://exam_rules.txt"
+    assert all(c["source_type"] == "upload" for c in chunks)

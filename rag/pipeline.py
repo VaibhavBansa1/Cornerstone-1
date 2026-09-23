@@ -38,6 +38,17 @@ def _load_index():
     return _index, _chunks
 
 
+def reload_index():
+    """Drop the cached index so the next query reads the rebuilt one."""
+    global _index, _chunks
+    _index = None
+    _chunks = None
+
+
+def index_exists() -> bool:
+    return config.FAISS_INDEX_PATH.exists() and config.INDEX_METADATA_PATH.exists()
+
+
 def retrieve(query: str, top_k: int = config.TOP_K) -> list[dict]:
     index, chunks = _load_index()
     query_vec = embed_texts([query])
@@ -64,7 +75,9 @@ def _build_context_block(results: list[dict]) -> str:
 SYSTEM_PROMPT = (
     "You answer questions about the MITS Gwalior Information Technology "
     "department using ONLY the provided context. If the context does not "
-    "contain the answer, say so plainly. Cite sources by their [n] marker."
+    "contain the answer, say so plainly. Cite sources by their [n] marker. "
+    "Reply in the same language the student used (English, Hindi, or "
+    "Hinglish)."
 )
 
 
@@ -153,9 +166,9 @@ _PROVIDERS = {
 }
 
 
-def generate_answer(query: str, results: list[dict]) -> str:
+def generate_answer(query: str, results: list[dict], provider: str | None = None) -> str:
     context = _build_context_block(results)
-    provider = _resolve_provider()
+    provider = provider or _resolve_provider()
 
     if provider == "none":
         return (
@@ -178,8 +191,9 @@ def generate_answer(query: str, results: list[dict]) -> str:
 
 def answer(query: str, top_k: int = config.TOP_K) -> dict:
     results = retrieve(query, top_k=top_k)
-    text = generate_answer(query, results)
-    return {"query": query, "answer": text, "sources": results}
+    provider = _resolve_provider()
+    text = generate_answer(query, results, provider)
+    return {"query": query, "answer": text, "sources": results, "provider": provider}
 
 
 def main():

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IT Department Help Desk</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="chat-wrap">
+  <div class="topbar">
+    <div class="logo">IT</div>
+    <div>
+      <h1>IT Department Help Desk</h1>
+      <div class="sub">MITS Gwalior &middot; answers from official department pages and documents</div>
+    </div>
+    <div class="right"><a href="/admin">Admin</a></div>
+  </div>
+  <div id="banner"></div>
+  <div class="messages" id="messages">
+    <div class="welcome" id="welcome">
+      <h2>Ask anything about the IT department</h2>
+      <div>Syllabus, time table, faculty, labs, notices&hellip; English, Hindi or Hinglish all work.</div>
+      <div class="suggest">
+        <button>What programs does the IT department offer?</button>
+        <button>Who is the head of the IT department?</button>
+        <button>5th sem ka syllabus kahan milega?</button>
+        <button>Which labs are available in the department?</button>
+      </div>
+    </div>
+  </div>
+  <form class="composer" id="composer">
+    <input id="q" autocomplete="off" placeholder="Type your question...">
+    <button id="send" type="submit">Send</button>
+  </form>
+</div>
+<script src="/static/chat.js"></script>
+</body>
+</html>
