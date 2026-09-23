@@ -125,6 +125,7 @@ generated answer.
 | Local model via an OpenAI-compatible server (LM Studio, llama.cpp, vLLM) | `export OPENAI_API_KEY=anything OPENAI_BASE_URL=http://localhost:1234/v1 OPENAI_MODEL=<your-local-model-name>` |
 | Gemini | `export GEMINI_API_KEY=...` (or `GOOGLE_API_KEY`; override model with `GEMINI_MODEL`) |
 | Local model via Ollama | `ollama pull llama3.1 && ollama serve` (defaults to `http://localhost:11434`, model `llama3.1` — override with `OLLAMA_BASE_URL` / `OLLAMA_MODEL`) |
+| $env:key = "value"     | for PowerShell |
 
 To force a specific backend instead of auto-detecting, set
 `RAG_GENERATION_PROVIDER` to `anthropic`, `openai`, `gemini`, `ollama`, or
