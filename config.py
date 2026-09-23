@@ -88,11 +88,11 @@ GENERATION_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 # OpenAI, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM) when
 # OPENAI_BASE_URL points at it instead of https://api.openai.com/v1.
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")  # None => official OpenAI API
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "huihui-ai.deepseek-r1-distill-qwen-14b-abliterated-v2")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "http://localhost:1234/v1")  # None => official OpenAI API
 
 # Gemini (used when GEMINI_API_KEY or GOOGLE_API_KEY is set)
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # Local LLM via Ollama's native API (https://github.com/ollama/ollama) -- no
 # API key needed, just `ollama pull <model>` and `ollama serve` running.
