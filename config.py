@@ -59,6 +59,12 @@ RAW_ASSETS_DIR = DATA_DIR / "raw" / "assets"
 PROCESSED_DIR = DATA_DIR / "processed"
 INDEX_DIR = DATA_DIR / "index"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
+# Documents uploaded by staff through the admin page (web/app.py). These are
+# indexed alongside the crawled site on every rebuild.
+UPLOADS_DIR = DATA_DIR / "uploads"
+UPLOAD_EXTENSIONS = {".pdf", ".docx", ".txt"}
+# Every question/answer asked through the web UI is logged here.
+CHAT_LOG_DB_PATH = DATA_DIR / "chat_log.db"
 CHUNKS_PATH = PROCESSED_DIR / "chunks.jsonl"
 FAISS_INDEX_PATH = INDEX_DIR / "faiss.index"
 INDEX_METADATA_PATH = INDEX_DIR / "chunks_meta.jsonl"

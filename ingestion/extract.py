@@ -22,6 +22,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
+import zipfile
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -57,6 +59,19 @@ def pdf_to_text(path: Path) -> str:
         return ""
 
 
+def docx_to_text(path: Path) -> str:
+    """Pull paragraph text out of a .docx without needing python-docx."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+    except (KeyError, zipfile.BadZipFile) as exc:
+        log.warning("Failed to read %s as .docx: %s", path, exc)
+        return ""
+    paragraphs = re.findall(r"<w:p[ >].*?</w:p>", xml, flags=re.S)
+    lines = ["".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p)) for p in paragraphs]
+    return "\n".join(line for line in lines if line.strip())
+
+
 def chunk_text(text: str, size: int = config.CHUNK_SIZE_CHARS, overlap: int = config.CHUNK_OVERLAP_CHARS):
     text = text.strip()
     if not text:
@@ -78,9 +93,47 @@ def make_chunk_id(source_url: str, chunk_index: int) -> str:
     return hashlib.sha1(f"{source_url}::{chunk_index}".encode("utf-8")).hexdigest()
 
 
-def build_chunks() -> list[dict]:
-    manifest = json.loads(config.MANIFEST_PATH.read_text(encoding="utf-8"))
+def upload_to_text(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        return pdf_to_text(path)
+    if ext == ".docx":
+        return docx_to_text(path)
+    if ext == ".txt":
+        return path.read_text(encoding="utf-8", errors="ignore")
+    return ""
+
+
+def build_upload_chunks() -> list[dict]:
+    """Chunks for documents staff uploaded through the admin page."""
     chunks: list[dict] = []
+    if not config.UPLOADS_DIR.exists():
+        return chunks
+    for path in sorted(config.UPLOADS_DIR.iterdir()):
+        if path.suffix.lower() not in config.UPLOAD_EXTENSIONS:
+            continue
+        source_url = f"upload://{path.name}"
+        for i, piece in enumerate(chunk_text(upload_to_text(path))):
+            chunks.append(
+                {
+                    "id": make_chunk_id(source_url, i),
+                    "source_url": source_url,
+                    "source_type": "upload",
+                    "local_path": f"uploads/{path.name}",
+                    "title": path.stem,
+                    "chunk_index": i,
+                    "text": piece,
+                }
+            )
+    return chunks
+
+
+def build_chunks() -> list[dict]:
+    chunks: list[dict] = []
+    if not config.MANIFEST_PATH.exists():
+        log.warning("No crawl manifest at %s; indexing uploaded documents only.", config.MANIFEST_PATH)
+        return build_upload_chunks()
+    manifest = json.loads(config.MANIFEST_PATH.read_text(encoding="utf-8"))
 
     # Map asset URL -> manifest entry so we can pull alt text / referring
     # page titles from the pages that mention them.
@@ -155,6 +208,7 @@ def build_chunks() -> list[dict]:
                 }
             )
 
+    chunks.extend(build_upload_chunks())
     return chunks
 
 

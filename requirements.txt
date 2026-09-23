@@ -5,6 +5,7 @@ pypdf>=4.0
 sentence-transformers>=3.0
 faiss-cpu>=1.8
 numpy>=1.26
+flask>=3.0
 pytest>=8.0
 
 # --- Answer generation backend: install whichever one(s) you'll use ---
