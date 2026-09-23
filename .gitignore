@@ -10,4 +10,6 @@ data/raw/
 data/processed/
 data/index/
 data/manifest.json
+data/uploads/
+data/chat_log.db
 !data/.gitkeep

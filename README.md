@@ -44,6 +44,27 @@ generation (RAG) query pipeline.
    chunks, and hands them to a pluggable generation backend that answers
    using only that retrieved context, citing sources.
 
+## Web interface
+
+`web/app.py` is a small Flask server with two pages:
+
+- **Student chat** (`/`) -- WhatsApp-style chat window. Every answer shows
+  the source page/document it came from; if no LLM is configured it shows
+  the best-matching passages instead.
+- **Admin dashboard** (`/admin`) -- list of everything indexed, drag-and-drop
+  upload of extra PDF/DOCX/TXT documents (e.g. an exam schedule that isn't
+  on the website), removing uploads, and usage stats (questions asked,
+  average response time, most-referenced sources, recent questions).
+  Uploads and removals need the admin password (`ADMIN_PASSWORD` env var,
+  default `mits-admin`) and trigger an index rebuild in the background.
+
+Every question is logged to `data/chat_log.db` (SQLite).
+
+```bash
+python run_pipeline.py   # once, to build the index
+python -m web.app        # http://localhost:5000  (admin: /admin)
+```
+
 ## Usage
 
 ### With uv (recommended)
@@ -64,6 +85,9 @@ uv run run_pipeline.py
 
 # Ask a question
 uv run -m rag.pipeline "What programs does the IT department offer?"
+
+# Start the web UI (http://localhost:5000)
+uv run -m web.app
 
 # Run tests
 uv run pytest tests/ -q
@@ -130,8 +154,9 @@ python -m pytest tests/ -q
 
 `tests/test_crawler.py` uses an in-memory fake site (no live network calls)
 to verify scope enforcement, single-visit guarantees, and asset
-deduplication. `tests/test_ingestion.py` covers HTML text extraction and
-chunking.
+deduplication. `tests/test_ingestion.py` covers HTML text extraction,
+chunking and uploaded documents. `tests/test_web.py` covers the web API
+with the model stubbed out.
 
 ## Data layout
 
@@ -143,6 +168,8 @@ data/
     assets/                  # downloaded PDFs, images, audio, video
   processed/
     chunks.jsonl             # extracted + chunked text ready for embedding
+  uploads/                   # documents uploaded from the admin page
+  chat_log.db                # every question asked via the web UI
   index/
     faiss.index              # vector index
     chunks_meta.jsonl        # chunk metadata aligned with the index
