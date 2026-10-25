@@ -42,6 +42,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("crawler")
 
 
+def _freshness(resp) -> dict:
+    """When the server says the file last changed, and when we fetched it.
+
+    Used by ingestion to date documents that contain no dates themselves.
+    """
+    return {
+        "last_modified": resp.headers.get("Last-Modified", ""),
+        "fetched_at": time.time(),
+    }
+
+
 def normalize_url(url: str) -> str:
     """Strip fragments and trailing slashes so equivalent URLs dedupe."""
     url, _frag = urldefrag(url)
@@ -221,6 +232,7 @@ class ScopedCrawler:
                     "url": url,
                     "title": title,
                     "local_path": str(local_path.relative_to(config.DATA_DIR)),
+                    **_freshness(resp),
                 }
             )
 
@@ -378,6 +390,7 @@ class ScopedCrawler:
                 "content_type": content_type,
                 "size_bytes": local_path.stat().st_size,
                 "original_filename": filename,
+                **_freshness(resp),
             }
         )
 
@@ -418,6 +431,7 @@ class ScopedCrawler:
                 "referenced_from": referenced_from,
                 "content_type": resp.headers.get("Content-Type", ""),
                 "size_bytes": local_path.stat().st_size,
+                **_freshness(resp),
             }
         )
 

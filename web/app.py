@@ -24,9 +24,12 @@ from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 import config
+from ingestion.dates import label as date_label
 from ingestion.extract import build_chunks, write_chunks
-from rag import pipeline
-from rag.embed_index import build_index
+from rag import llm, pipeline
+from rag.embed_index import build_index, read_index_info
+from rag.embeddings import resolve_device
+from rag.retrieval import IndexMismatchError
 from web import chatlog
 
 log = logging.getLogger("web")
@@ -59,6 +62,7 @@ def _public_source(n: int, chunk: dict) -> dict:
         "link": None if url.startswith("upload://") else url,
         "source_type": chunk.get("source_type"),
         "score": round(chunk.get("score", 0.0), 3),
+        "date": date_label(chunk.get("date")),
         "snippet": chunk["text"][:400],
     }
 
@@ -85,10 +89,16 @@ def static_files(name):
 
 @app.get("/api/status")
 def status():
+    info = read_index_info()
     return jsonify(
         {
             "index_ready": pipeline.index_exists(),
-            "provider": pipeline._resolve_provider(),
+            # e.g. "openrouter:google/gemma-4-31b-it:free -> ollama:llama3.1"
+            "provider": llm.describe_chain(),
+            "embedding_model": config.EMBEDDING_MODEL_NAME,
+            "index_built_with": info.get("embedding_model"),
+            "embedding_device": resolve_device(),
+            "reranker": config.RERANKER_MODEL,
             "rebuilding": _rebuild_state["running"],
             "last_rebuild_error": _rebuild_state["last_error"],
         }
@@ -104,13 +114,16 @@ def query():
         return jsonify({"error": "The document index has not been built yet. Run `python run_pipeline.py` first."}), 503
 
     started = time.perf_counter()
-    result = pipeline.answer(question)
+    try:
+        result = pipeline.answer(question)
+    except IndexMismatchError as exc:
+        return jsonify({"error": str(exc)}), 503
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
     sources = [_public_source(i, c) for i, c in enumerate(result["sources"], 1)]
-    # generate_answer() falls back to dumping the retrieved context when no
-    # LLM is configured or the call fails; the UI shows passages instead.
-    generated = result["provider"] != "none" and not result["answer"].startswith("[Generation via")
+    # When no LLM answered, the pipeline returns the retrieved passages
+    # instead; the UI then shows those passages.
+    generated = result.get("generated", result["provider"] != "none")
     cited_numbers = {int(n) for n in re.findall(r"\[(\d+)\]", result["answer"])} if generated else set()
     cited = [s for s in sources if s["n"] in cited_numbers] or sources[:1]
 

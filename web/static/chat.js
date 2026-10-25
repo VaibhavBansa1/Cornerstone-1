@@ -22,7 +22,8 @@ function addMessage(who) {
 }
 
 function sourceChip(s) {
-  const chip = el(s.link ? "a" : "span", "src", "[" + s.n + "] " + s.title);
+  const chip = el(s.link ? "a" : "span", "src",
+    "[" + s.n + "] " + s.title + (s.date && s.date !== "undated" ? " (" + s.date + ")" : ""));
   if (s.link) { chip.href = s.link; chip.target = "_blank"; chip.rel = "noopener"; }
   return chip;
 }
@@ -40,7 +41,8 @@ function renderAnswer(bubble, data) {
     bubble.appendChild(el("div", "note", "No AI model is connected right now, so here are the closest matching passages:"));
     data.sources.slice(0, 3).forEach(s => {
       const p = el("div", "passage");
-      p.appendChild(el("b", null, "[" + s.n + "] " + s.title));
+      p.appendChild(el("b", null, "[" + s.n + "] " + s.title +
+        (s.date && s.date !== "undated" ? " (" + s.date + ")" : "")));
       p.appendChild(document.createTextNode(s.snippet + (s.snippet.length >= 400 ? "..." : "")));
       bubble.appendChild(p);
     });
@@ -91,6 +93,6 @@ fetch("/api/status").then(r => r.json()).then(s => {
     banner.textContent = "Document index not built yet. Run: python run_pipeline.py";
   } else if (s.provider === "none") {
     banner.className = "banner";
-    banner.textContent = "No AI model configured. Showing matching passages only (set GEMINI_API_KEY or run Ollama for full answers).";
+    banner.textContent = "No AI model configured. Showing matching passages only (set OPENROUTER_API_KEY / GROQ_API_KEY, or run Ollama, for full answers).";
   }
 }).catch(() => {});
