@@ -13,3 +13,7 @@ data/manifest.json
 data/uploads/
 data/chat_log.db
 !data/.gitkeep
+
+# local run logs
+*.log
+data/eval_answers.md
