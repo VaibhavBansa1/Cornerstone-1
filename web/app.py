@@ -57,11 +57,17 @@ def _raw_source_label(chunk: dict) -> str:
     if chunk.get("source_type") in ("pdf", "image", "audio", "video", "document"):
         # PDFs are titled "<page title> - <file name>"; Drive links end in
         # "/view", so the URL is no good as a name.
+        url_name = chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
         if " - " in title:
             name = title.rsplit(" - ", 1)[-1].strip()
-            if name and not name.lower().startswith("uc__"):
+            # "uc__1a2b.pdf" / "images__Dept__x.pdf__9f3e.pdf" are our own
+            # saved-file names; the link's last part is the real file name.
+            looks_internal = name.lower().startswith("uc__") or "__" in name
+            if name and not looks_internal:
                 return name
-        name = chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
+            if looks_internal and url_name.lower() not in ("view", "edit", "preview"):
+                return url_name
+        name = url_name
         if name.lower() in ("view", "edit", "preview") or name.startswith("uc?"):
             return title or "Google Drive file"
         return name
