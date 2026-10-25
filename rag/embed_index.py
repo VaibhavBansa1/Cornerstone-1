@@ -27,7 +27,7 @@ def passage_text(chunk: dict) -> str:
     """
     header = " | ".join(
         part for part in (chunk.get("title", "").strip(), date_label(chunk.get("date"))) if part
-    )
+    )  # the title already includes the link label ("V SEM · 2024-28 BATCH")
     return f"{header}\n{chunk['text']}" if header else chunk["text"]
 
 

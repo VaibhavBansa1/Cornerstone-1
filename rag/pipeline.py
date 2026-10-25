@@ -18,7 +18,7 @@ from datetime import date
 import config
 from ingestion.dates import label as date_label
 from rag import llm
-from rag.retrieval import HybridRetriever, load_retriever, role_timeline
+from rag.retrieval import HybridRetriever, load_retriever, role_timeline, semester_for_batch, session_start_year
 
 log = logging.getLogger("rag.pipeline")
 
@@ -66,7 +66,21 @@ Rules:
 3. If the sources do not contain the answer, say so plainly and suggest contacting the department office. Never guess names, dates or numbers.
 4. Cite sources with their [n] markers.
 5. If a "Timeline" is given at the top, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
-6. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
+6. Batches: "2024-28 batch" = students admitted in 2024. {batch_guide} A question like "5th sem syllabus" without a year means the batch that is in 5th sem now; "2025 students" means the 2025-29 batch. If a source is for a different batch, say which batch it is for.
+7. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
+
+
+def batch_guide(today: date | None = None) -> str:
+    """'In the July-Dec 2026 session: 2026-30 batch = 1st sem, ...'"""
+    today = today or date.today()
+    start = session_start_year(today)
+    session = f"July-Dec {start}" if today.month >= 7 else f"Jan-June {start + 1}"
+    parts = []
+    for admitted in range(start, start - 4, -1):
+        sem = semester_for_batch(admitted, today)
+        if 1 <= sem <= 8:
+            parts.append(f"{admitted}-{(admitted + 4) % 100:02d} batch = semester {sem}")
+    return f"In the current {session} session: " + ", ".join(parts) + "."
 
 
 def build_context(results: list[dict]) -> str:
@@ -96,7 +110,9 @@ def build_prompt(query: str, results: list[dict], today: date | None = None) -> 
     """(system prompt, user message) exactly as the LLM will see them."""
     context = build_context(results)
     timeline = build_timeline(query, results)
-    system = SYSTEM_PROMPT.format(today=(today or date.today()).strftime("%d %B %Y"))
+    system = SYSTEM_PROMPT.format(
+        today=(today or date.today()).strftime("%d %B %Y"), batch_guide=batch_guide(today)
+    )
     # The timeline goes first: small models weigh what they read first.
     head = f"{timeline}\n\n" if timeline else ""
     return system, f"{head}Sources:\n{context}\n\nQuestion: {query}"

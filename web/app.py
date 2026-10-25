@@ -45,8 +45,15 @@ _rebuild_state = {"running": False, "last_error": None, "finished_at": None}
 
 
 def _source_label(chunk: dict) -> str:
-    """Short, human name for a source card: the file name for documents,
-    the page title for web pages ("Time%20Table.pdf" -> "Time Table.pdf")."""
+    """Short, human name for a source card. A file linked as "CLICK HERE"
+    in a table gets its table position ("Syllabus · V SEM · 2024-28 BATCH");
+    otherwise the file name for documents and the page title for pages."""
+    label = (chunk.get("link_label") or "").strip()
+    if label and chunk.get("source_type") != "page":
+        page = (chunk.get("title") or "").split(" - ")[0].strip()
+        if page and page.lower() not in label.lower():
+            return f"{page} · {label}"
+        return label
     return unquote(_raw_source_label(chunk))
 
 

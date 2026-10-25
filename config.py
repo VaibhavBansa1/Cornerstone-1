@@ -92,6 +92,12 @@ INDEX_INFO_PATH = INDEX_DIR / "index_info.json"
 CHUNK_SIZE_CHARS = 900
 CHUNK_OVERLAP_CHARS = 150
 
+# --- OCR (scanned PDFs) -----------------------------------------------------
+# auto | easyocr | rapidocr | none   (install engines with: uv sync --extra ocr)
+OCR_ENGINE = _env("OCR_ENGINE", "auto")
+OCR_RENDER_SCALE = 2.0      # page image size for OCR (2 = ~150 dpi)
+OCR_MIN_CONFIDENCE = 0.35   # drop OCR words the engine isn't sure about
+
 # --- Embeddings ------------------------------------------------------------
 # Changing the model means the index must be rebuilt:
 #   python run_pipeline.py --skip-crawl
