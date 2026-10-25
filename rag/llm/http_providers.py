@@ -112,26 +112,42 @@ class OllamaProvider(LLMProvider):
         return f"{self.name}:{self._resolved_model or self.model}"
 
     def generate(self, system: str, user: str) -> str:
-        data = _post(
+        payload = {
+            "model": self._pick_model(),
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "keep_alive": self.settings.get("keep_alive", "30m"),
+            "think": bool(self.settings.get("think", False)),
+            "options": {
+                "temperature": config.LLM_TEMPERATURE,
+                "num_ctx": self.settings.get("num_ctx", 8192),
+            },
+        }
+        try:
+            data = self._chat(payload)
+        except ProviderError as exc:
+            # Older Ollama versions / models that don't know the "think" flag.
+            if "think" not in str(exc).lower():
+                raise
+            payload.pop("think")
+            data = self._chat(payload)
+        text = clean_reply((data.get("message") or {}).get("content", ""))
+        if not text:
+            reason = data.get("done_reason", "")
+            raise ProviderError(f"ollama: empty reply{f' (done_reason={reason})' if reason else ''}")
+        return text
+
+    def _chat(self, payload: dict) -> dict:
+        return _post(
             f"{self.base_url}/api/chat",
             headers={"Content-Type": "application/json"},
-            payload={
-                "model": self._pick_model(),
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "stream": False,
-                "keep_alive": self.settings.get("keep_alive", "30m"),
-                "options": {"temperature": config.LLM_TEMPERATURE},
-            },
+            payload=payload,
             provider=self.name,
             timeout=self.settings.get("timeout"),
         )
-        text = clean_reply((data.get("message") or {}).get("content", ""))
-        if not text:
-            raise ProviderError("ollama: empty reply")
-        return text
 
 
 class GeminiProvider(LLMProvider):

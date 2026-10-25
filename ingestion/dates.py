@@ -32,7 +32,9 @@ _DAY_MONTH_YEAR = re.compile(
 # March 10, 2025
 _MONTH_DAY_YEAR = re.compile(r"\b" + _MONTH + r"\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+" + _YEAR + r"\b", re.I)
 # July-Dec 2026 / Jan - June, 2026 (a session); we keep the starting month
-_MONTH_RANGE_YEAR = re.compile(r"\b" + _MONTH + r"\s*[-–to]+\s*" + _MONTH + r",?\s+" + _YEAR + r"\b", re.I)
+_MONTH_RANGE_YEAR = re.compile(
+    r"\b" + _MONTH + r"(?:\s*[-–/]\s*|\s+to\s+|\s+)" + _MONTH + r",?\s+" + _YEAR + r"\b", re.I
+)
 # March 2025 / Mar. 2025
 _MONTH_YEAR = re.compile(r"\b" + _MONTH + r",?\s+" + _YEAR + r"\b", re.I)
 # 2021-22 / 2021-2022 (academic year, starts in July)

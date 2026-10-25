@@ -211,6 +211,11 @@ PROVIDER_SETTINGS = {
         # Loading a big local model the first time can take minutes.
         "timeout": _env_int("OLLAMA_TIMEOUT_SECONDS", 300),
         "keep_alive": _env("OLLAMA_KEEP_ALIVE", "30m"),
+        # Room for the question + sources + answer (Ollama's default is small).
+        "num_ctx": _env_int("OLLAMA_NUM_CTX", 8192),
+        # Thinking models (Qwen3, DeepSeek-R1, Gemma-4 ...) are much faster
+        # with thinking off, and the sources already contain the answer.
+        "think": _env("OLLAMA_THINK", "false").lower() in ("1", "true", "yes"),
     },
 }
 

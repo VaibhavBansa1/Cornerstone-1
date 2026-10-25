@@ -207,12 +207,15 @@ class HybridRetriever:
             and holder.search(self.chunks[i]["text"])
         ]
         mentions.sort(key=lambda i: self.chunks[i]["date"], reverse=True)
-        picked, seen = [], set()
-        for i in mentions:
+        picked, seen, sources = [], set(), set()
+        for i in mentions:  # newest first, one chunk per document
             key = _dedupe_key(self.chunks[i]["text"])
-            if key not in seen:
-                seen.add(key)
-                picked.append(i)
+            source = self.chunks[i]["source_url"]
+            if key in seen or source in sources:
+                continue
+            seen.add(key)
+            sources.add(source)
+            picked.append(i)
             if len(picked) >= config.NEWEST_ROLE_CHUNKS:
                 break
         return picked
