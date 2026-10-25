@@ -80,3 +80,50 @@ def test_upload_requires_admin_password_and_allowed_type(client):
     assert client.delete("/api/uploads/notes.txt", headers=headers).status_code == 200
     assert not (config.UPLOADS_DIR / "notes.txt").exists()
     assert client.delete("/api/uploads/notes.txt", headers=headers).status_code == 404
+
+
+def test_cited_numbers_understands_grouped_citations():
+    assert webapp.cited_numbers("See [2].") == {2}
+    assert webapp.cited_numbers("From [4, 5, 6] and [1][3]") == {1, 3, 4, 5, 6}
+    assert webapp.cited_numbers("Range [2-4]") == {2, 3, 4}
+
+
+def test_saved_copy_is_served_but_only_from_data_folders(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    (tmp_path / "raw" / "assets").mkdir(parents=True)
+    (tmp_path / "raw" / "assets" / "tt.pdf").write_bytes(b"%PDF-1.4 test")
+    (tmp_path / "chat_log.db").write_bytes(b"secret")
+    (tmp_path / "index").mkdir()
+    (tmp_path / "index" / "faiss.index").write_bytes(b"secret")
+
+    ok = client.get("/files/raw/assets/tt.pdf")
+    assert ok.status_code == 200 and ok.data == b"%PDF-1.4 test"
+    assert client.get("/files/chat_log.db").status_code == 404
+    assert client.get("/files/index/faiss.index").status_code == 404
+    assert client.get("/files/raw/../chat_log.db").status_code == 404
+    assert client.get("/files/raw/assets/missing.pdf").status_code == 404
+
+
+def test_answer_sources_carry_open_links(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    (tmp_path / "raw" / "pages").mkdir(parents=True)
+    (tmp_path / "raw" / "pages" / "syllabus.html").write_text("<html></html>")
+
+    def answer(question, top_k=config.TOP_K):
+        return {"query": question, "answer": "It is in the syllabus [1, 2].", "provider": "groq:x",
+                "generated": True,
+                "sources": [
+                    {"source_url": "https://web.mitsgwalior.in/syllabus-it", "source_type": "page",
+                     "local_path": "raw\\pages\\syllabus.html", "title": "Syllabus", "text": "t", "date": "2026-07-01"},
+                    {"source_url": "upload://rules.pdf", "source_type": "upload", "local_path": "uploads/rules.pdf",
+                     "title": "rules", "text": "t"},
+                ]}
+
+    monkeypatch.setattr(pipeline, "answer", answer)
+    data = client.post("/api/query", json={"question": "syllabus?"}).get_json()
+    first, second = data["sources"]
+    assert data["cited"] == [1, 2]
+    assert first["link"] == "https://web.mitsgwalior.in/syllabus-it"
+    assert first["saved_copy"] == "/files/raw/pages/syllabus.html"
+    assert first["date"] == "Jul 2026"
+    assert second["link"] is None and second["saved_copy"] is None  # file missing -> no broken link

@@ -19,6 +19,7 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
@@ -53,18 +54,50 @@ def _source_label(chunk: dict) -> str:
     return title or name
 
 
+def _saved_copy_link(chunk: dict) -> str | None:
+    """URL of our own downloaded copy of this source (works even if the
+    college site or Google Drive is down; the only link for uploads)."""
+    local = (chunk.get("local_path") or "").replace("\\", "/")
+    if not local or not (config.DATA_DIR / local).exists():
+        return None
+    return "/files/" + quote(local)
+
+
 def _public_source(n: int, chunk: dict) -> dict:
     url = chunk["source_url"]
     return {
         "n": n,
         "title": _source_label(chunk),
+        "doc_title": chunk.get("title") or "",
         "source_url": url,
         "link": None if url.startswith("upload://") else url,
+        "saved_copy": _saved_copy_link(chunk),
         "source_type": chunk.get("source_type"),
         "score": round(chunk.get("score", 0.0), 3),
         "date": date_label(chunk.get("date")),
         "snippet": chunk["text"][:400],
+        "text": chunk["text"],
     }
+
+
+_CITATION = re.compile(r"\[(\s*\d+(?:\s*[,\u2013-]\s*\d+)*\s*)\]")
+
+
+def cited_numbers(answer: str) -> set[int]:
+    """Source numbers cited in an answer: [2], [1, 3], [4-6] and [1][2]."""
+    found: set[int] = set()
+    for group in _CITATION.findall(answer or ""):
+        for part in group.split(","):
+            part = part.strip()
+            bounds = re.split(r"\s*[\u2013-]\s*", part)
+            if len(bounds) == 2 and all(b.isdigit() for b in bounds):
+                lo, hi = int(bounds[0]), int(bounds[1])
+                if 0 < hi - lo < 20:
+                    found.update(range(lo, hi + 1))
+                    continue
+            if part.isdigit():
+                found.add(int(part))
+    return found
 
 
 def _check_admin():
@@ -85,6 +118,50 @@ def admin_page():
 @app.get("/static/<path:name>")
 def static_files(name):
     return send_from_directory(STATIC_DIR, name)
+
+
+# Only these folders inside data/ may be served -- never the index, the
+# chat log or anything else.
+SERVABLE_DIRS = ("raw/", "uploads/")
+
+
+@app.get("/files/<path:subpath>")
+def saved_file(subpath):
+    """Open our saved copy of a crawled page / PDF / uploaded document."""
+    subpath = subpath.replace("\\", "/")
+    if not subpath.startswith(SERVABLE_DIRS) or ".." in subpath.split("/"):
+        return jsonify({"error": "Not found."}), 404
+    path = config.DATA_DIR / subpath
+    if not path.is_file():
+        return jsonify({"error": "Not found."}), 404
+    if path.suffix.lower() == ".html":
+        # Point relative links/images at the live site so the saved page
+        # still shows pictures and its links work.
+        original = _original_url_for(subpath)
+        html = path.read_text(encoding="utf-8", errors="ignore")
+        if original:
+            banner = (
+                '<div style="background:#fff4e0;padding:6px 12px;font:13px sans-serif;'
+                'border-bottom:1px solid #e5c98f">Saved copy from the help desk index. '
+                f'<a href="{original}" target="_blank" rel="noopener">Open the live page</a></div>'
+            )
+            html = re.sub(r"(<head[^>]*>)", rf'\1<base href="{original}">', html, count=1, flags=re.I)
+            html = re.sub(r"(<body[^>]*>)", rf"\1{banner}", html, count=1, flags=re.I)
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+    return send_from_directory(config.DATA_DIR, subpath)
+
+
+def _original_url_for(local_path: str) -> str | None:
+    if not pipeline.index_exists():
+        return None
+    try:
+        _index, chunks = pipeline._load_index()
+    except Exception:
+        return None
+    for c in chunks:
+        if (c.get("local_path") or "").replace("\\", "/") == local_path:
+            return c["source_url"]
+    return None
 
 
 @app.get("/api/status")
@@ -124,8 +201,8 @@ def query():
     # When no LLM answered, the pipeline returns the retrieved passages
     # instead; the UI then shows those passages.
     generated = result.get("generated", result["provider"] != "none")
-    cited_numbers = {int(n) for n in re.findall(r"\[(\d+)\]", result["answer"])} if generated else set()
-    cited = [s for s in sources if s["n"] in cited_numbers] or sources[:1]
+    numbers = cited_numbers(result["answer"]) if generated else set()
+    cited = [s for s in sources if s["n"] in numbers] or sources[:1]
 
     chatlog.log_question(question, result["answer"], cited, result["provider"], elapsed_ms)
     return jsonify(
