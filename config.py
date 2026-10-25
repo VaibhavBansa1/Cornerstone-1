@@ -111,6 +111,7 @@ EMBEDDING_BATCH_SIZE = _env_int("EMBEDDING_BATCH_SIZE", 32)
 
 # --- Retrieval ---------------------------------------------------------------
 TOP_K = 6                      # pieces of text handed to the LLM
+TITLE_WEIGHT = 3               # keyword search: a title word counts this many times
 CANDIDATES_PER_RETRIEVER = 30  # how many each search method proposes
 # Re-scores the candidates with a model that reads question + text together.
 # The default is small (~90 MB) and fast on a laptop CPU. More accurate but

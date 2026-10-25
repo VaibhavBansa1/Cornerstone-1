@@ -151,3 +151,12 @@ def test_batch_guide_in_prompt():
 
     g = batch_guide(date(2026, 10, 26))
     assert "July-Dec 2026" in g and "2024-28 batch = semester 5" in g and "2025-29 batch = semester 3" in g
+
+
+def test_document_title_beats_long_text_that_repeats_the_words():
+    minutes = _chunk("BoS meeting. " + "The syllabus of each sem was discussed. " * 12, "2026-07-01",
+                     title="BoS Proceedings 2022.pdf")
+    syllabus = _chunk("Unit-I Mobile computing. Unit-II GPRS.", "2026-07-01",
+                      title="Syllabus - V SEM · 2024-28 BATCH - 5th 11_merged.pdf")
+    results = HybridRetriever([minutes, syllabus]).search("it V sem syllabus", top_k=2, today=TODAY)
+    assert results[0]["title"].startswith("Syllabus - V SEM")

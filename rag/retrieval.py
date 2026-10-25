@@ -293,7 +293,11 @@ class HybridRetriever:
         self.index = faiss_index
         self.embedder = embedder
         self.reranker = reranker
-        self.bm25 = BM25([f"{c.get('title', '')}\n{c['text']}" for c in chunks])
+        # Title words (file name + where it's linked, e.g. "Syllabus · V SEM ·
+        # 2024-28 BATCH") say what a document IS, so they count extra --
+        # otherwise long meeting minutes that mention "syllabus" 20 times win.
+        w = max(1, config.TITLE_WEIGHT)
+        self.bm25 = BM25([f"{(c.get('title', '') + ' ') * w}\n{c['text']}" for c in chunks])
 
     def _vector_search(self, query: str, top_n: int) -> list[tuple[int, float]]:
         if self.index is None or self.embedder is None:
