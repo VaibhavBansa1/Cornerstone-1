@@ -61,11 +61,11 @@ Today's date is {today}.
 Answer ONLY from the numbered sources below. Each source shows a date: the newest date mentioned in that text, or "undated".
 
 Rules:
-1. Facts change over time: who holds a post (HOD / Head / Dean / coordinator), timetables, syllabus, notices. When sources disagree, trust the most recent dated source and say "as of <month year>". Mention people from older sources only as former holders ("previously ..."), never as current.
+1. Facts change over time: who holds a post (HOD / Head / Dean / coordinator), timetables, syllabus, notices. When sources disagree, trust the most recent dated source and say "as of <month year>". Mention people from older sources only as former holders ("previously ..."), never as current. If a source says someone held a post "from X to Y", that person no longer holds it after Y.
 2. The same post can have different titles in different years (e.g. "HoD", "Professor & Head", "Dean, School of IT"). Use the exact title the newest source uses, and mention if the title changed.
 3. If the sources do not contain the answer, say so plainly and suggest contacting the department office. Never guess names, dates or numbers.
 4. Cite sources with their [n] markers.
-5. If a "Timeline" is given at the end, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
+5. If a "Timeline" is given at the top, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
 6. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
 
 
@@ -96,10 +96,10 @@ def build_prompt(query: str, results: list[dict], today: date | None = None) -> 
     """(system prompt, user message) exactly as the LLM will see them."""
     context = build_context(results)
     timeline = build_timeline(query, results)
-    if timeline:
-        context = f"{context}\n\n{timeline}"
     system = SYSTEM_PROMPT.format(today=(today or date.today()).strftime("%d %B %Y"))
-    return system, f"Sources:\n{context}\n\nQuestion: {query}"
+    # The timeline goes first: small models weigh what they read first.
+    head = f"{timeline}\n\n" if timeline else ""
+    return system, f"{head}Sources:\n{context}\n\nQuestion: {query}"
 
 
 def generate_answer(query: str, results: list[dict], today: date | None = None) -> llm.Reply:
