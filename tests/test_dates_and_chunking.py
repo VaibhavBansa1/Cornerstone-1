@@ -67,3 +67,22 @@ def test_make_chunks_stamps_chunk_and_document_dates():
     assert chunks[-1]["date"] == "2019-01-01"  # its own, older date
     undated_middle = [c for c in chunks[1:-1] if "2019" not in c["text"] and "2026" not in c["text"]]
     assert all(c["date"] == "2026-07-01" for c in undated_middle)  # falls back to doc date
+
+
+def test_semester_start_from_batch_label():
+    from ingestion.dates import date_from_batch_label
+
+    assert date_from_batch_label("V SEM · 2024-28 BATCH") == "2026-07-01"
+    assert date_from_batch_label("IV SEM · 2024-28 BATCH") == "2026-01-01"
+    assert date_from_batch_label("I SEM · 2026-30 BATCH") == "2026-07-01"
+    assert date_from_batch_label("Time Table July 2026") is None
+
+
+def test_book_year_does_not_beat_better_date_clues():
+    text = "Recommended Books: Pearson Education, 2000.\nUnit-I Introduction"
+    chunks = make_chunks(source_url="u", source_type="pdf", local_path="p", title="Syllabus - 5th.pdf",
+                         text=text, fallback_date="2026-07-23", link_label="V SEM · 2024-28 BATCH")
+    assert chunks[0]["doc_date"] == "2026-07-01"   # from the batch label, not "2000"
+    plain = make_chunks(source_url="u", source_type="pdf", local_path="p", title="x.pdf",
+                        text=text, fallback_date="2026-07-23")
+    assert plain[0]["doc_date"] == "2026-07-23"    # the PDF's own date, not "2000"

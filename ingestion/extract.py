@@ -40,7 +40,7 @@ from bs4 import BeautifulSoup
 import config
 from ingestion import ocr
 from ingestion.link_labels import labels_from_page
-from ingestion.dates import latest_date
+from ingestion.dates import date_from_batch_label, latest_date
 
 log = logging.getLogger("ingest")
 
@@ -314,7 +314,17 @@ def make_chunks(
     ``date``:     newest date inside that chunk, else ``doc_date``.
     """
     pieces = chunk_text(text)
-    doc_date = latest_date(f"{title}\n{text}") or fallback_date
+    # Best clue first: a real date in the text ("w.e.f. 27/07/2026") ->
+    # the semester the link is for ("V SEM · 2024-28 BATCH") -> the file's
+    # own date -> a bare year somewhere in the text (weakest: often a book's
+    # publication year).
+    full = f"{title}\n{text}"
+    doc_date = (
+        latest_date(full, allow_bare_years=False)
+        or date_from_batch_label(link_label or title)
+        or fallback_date
+        or latest_date(full)
+    )
     chunks = []
     for i, piece in enumerate(pieces):
         chunks.append(
@@ -326,7 +336,7 @@ def make_chunks(
                 "title": title,
                 "link_label": link_label,
                 "chunk_index": i,
-                "date": latest_date(piece) or doc_date,
+                "date": latest_date(piece, allow_bare_years=False) or doc_date,
                 "doc_date": doc_date,
                 "text": piece,
             }
