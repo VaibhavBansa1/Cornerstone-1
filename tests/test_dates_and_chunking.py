@@ -58,13 +58,13 @@ def test_chunks_break_on_paragraphs_and_overlap():
 
 
 def test_make_chunks_stamps_chunk_and_document_dates():
-    text = "Timetable (Session: July-Dec 2026)\n" + "filler line\n" * 200 + "Old note from 2019."
+    text = "Timetable (Session: July-Dec 2026)\n" + "filler line\n" * 200 + "Old note from 2019. Revised 10/03/2020."
     chunks = make_chunks(
         source_url="u", source_type="pdf", local_path="p", title="Time Table", text=text
     )
     assert chunks[0]["doc_date"] == "2026-07-01"
     assert chunks[0]["date"] == "2026-07-01"
-    assert chunks[-1]["date"] == "2019-01-01"  # its own, older date
+    assert chunks[-1]["date"] == "2020-03-10"  # its own, older full date
     undated_middle = [c for c in chunks[1:-1] if "2019" not in c["text"] and "2026" not in c["text"]]
     assert all(c["date"] == "2026-07-01" for c in undated_middle)  # falls back to doc date
 
