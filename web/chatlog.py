@@ -1,4 +1,9 @@
-"""SQLite log of every question asked through the web UI.
+"""SQLite usage log for the admin page's stats.
+
+Privacy: the text of questions and answers is NOT stored -- only when a
+question was asked, which sources were cited, which AI answered and how
+long it took. (The table keeps its old question/answer columns, filled
+with empty strings, so older databases keep working.)
 
 Stands in for the "Chat Log" entity from the design: question, answer,
 which sources were cited, and how long the answer took. Used by the admin
@@ -33,12 +38,14 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-def log_question(question: str, answer: str, sources: list[dict], provider: str, response_ms: int):
+def log_question(sources: list[dict], provider: str, response_ms: int):
+    """Record one answered question for the stats -- without its text."""
+    slim = [{"source_url": x.get("source_url"), "title": x.get("title")} for x in sources]
     with _connect() as conn:
         conn.execute(
             "INSERT INTO chat_log (asked_at, question, answer, sources, provider, response_ms) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (time.time(), question, answer, json.dumps(sources), provider, response_ms),
+            "VALUES (?, '', '', ?, ?, ?)",
+            (time.time(), json.dumps(slim), provider, response_ms),
         )
 
 
@@ -50,10 +57,10 @@ def stats(top_n: int = 5, label_for=None, link_for=None) -> dict:
     logged before a naming fix still show a proper name.
     """
     with _connect() as conn:
-        rows = conn.execute("SELECT question, sources, response_ms, asked_at FROM chat_log ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT sources, response_ms FROM chat_log ORDER BY id DESC").fetchall()
     cited = Counter()
     fallback_name: dict[str, str] = {}
-    for _q, sources, _ms, _t in rows:
+    for sources, _ms in rows:
         for s in json.loads(sources):
             url = s.get("source_url") or s.get("title") or "?"
             cited[url] += 1
@@ -64,7 +71,6 @@ def stats(top_n: int = 5, label_for=None, link_for=None) -> dict:
         top.append({"name": name, "count": count, "link": link_for(url) if link_for else None})
     return {
         "total_questions": len(rows),
-        "avg_response_ms": round(sum(r[2] for r in rows) / len(rows)) if rows else 0,
+        "avg_response_ms": round(sum(r[1] for r in rows) / len(rows)) if rows else 0,
         "top_sources": top,
-        "recent_questions": [{"question": r[0], "asked_at": r[3]} for r in rows[:10]],
     }

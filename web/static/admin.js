@@ -18,14 +18,6 @@ function link(text, href, cls) {
   return a;
 }
 
-function timeAgo(seconds) {
-  const diff = Date.now() / 1000 - seconds;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return Math.floor(diff / 60) + " min ago";
-  if (diff < 86400) return Math.floor(diff / 3600) + " h ago";
-  return new Date(seconds * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-}
-
 function renderDocs() {
   const f = $("filter").value.toLowerCase();
   const body = $("docs");
@@ -89,16 +81,6 @@ async function load(attempt = 1) {
     const name = link(s.name, s.link, "rank-name"); name.title = s.name;
     item.append(name, el("span", "count", s.count + "×"));
     top.appendChild(item);
-  });
-
-  const recent = $("recent");
-  recent.textContent = "";
-  if (!stats.recent_questions.length) recent.appendChild(el("li", "muted", "No questions yet"));
-  stats.recent_questions.forEach(q => {
-    const item = el("li");
-    item.append(el("span", "q", q.question), el("span", "when", timeAgo(q.asked_at)));
-    item.title = new Date(q.asked_at * 1000).toLocaleString();
-    recent.appendChild(item);
   });
 }
 

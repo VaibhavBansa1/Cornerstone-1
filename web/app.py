@@ -252,7 +252,7 @@ def query():
     numbers = cited_numbers(result["answer"]) if generated else set()
     cited = [s for s in sources if s["n"] in numbers] or sources[:1]
 
-    chatlog.log_question(question, result["answer"], cited, result["provider"], elapsed_ms)
+    chatlog.log_question(cited, result["provider"], elapsed_ms)  # question text is never stored
     return jsonify(
         {
             "answer": result["answer"] if generated else None,
