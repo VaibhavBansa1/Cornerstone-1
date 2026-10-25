@@ -19,7 +19,7 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
@@ -46,7 +46,11 @@ _rebuild_state = {"running": False, "last_error": None, "finished_at": None}
 
 def _source_label(chunk: dict) -> str:
     """Short, human name for a source card: the file name for documents,
-    the page title for web pages."""
+    the page title for web pages ("Time%20Table.pdf" -> "Time Table.pdf")."""
+    return unquote(_raw_source_label(chunk))
+
+
+def _raw_source_label(chunk: dict) -> str:
     title = (chunk.get("title") or "").strip()
     if chunk.get("source_type") == "upload":
         return title or chunk["source_url"].removeprefix("upload://")
