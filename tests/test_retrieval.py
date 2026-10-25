@@ -74,3 +74,14 @@ def test_duplicate_chunks_take_one_slot():
     chunks = [_chunk(same, "2026-07-27") for _ in range(5)] + [_chunk("Time Table lab rooms", "2026-07-27")]
     results = HybridRetriever(chunks).search("time table coordinator", top_k=5, today=TODAY)
     assert sum(r["text"] == same for r in results) == 1
+
+
+def test_broken_reranker_does_not_break_search():
+    class BrokenReranker:
+        def score(self, query, texts):
+            raise OSError("model files missing")
+
+    retriever = HybridRetriever(HEADS, reranker=BrokenReranker())
+    results = retriever.search("who is the HOD of IT", top_k=3, today=TODAY)
+    assert len(results) == 3
+    assert retriever.reranker is None
