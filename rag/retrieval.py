@@ -37,6 +37,7 @@ from datetime import date
 import numpy as np
 
 import config
+from rag import query_understanding as qu
 
 log = logging.getLogger("rag.retrieval")
 
@@ -66,25 +67,22 @@ for _n in range(1, 9):
 
 def session_start_year(today: date | None = None) -> int:
     """Academic sessions run July-June: Oct 2026 -> 2026, Mar 2027 -> 2026."""
-    today = today or date.today()
-    return today.year if today.month >= 7 else today.year - 1
+    return qu.session_start_year(today or date.today())
 
 
 def batch_for_semester(semester: int, today: date | None = None) -> int:
-    """Admission year of the batch that is in (or nearest to) ``semester``
-    in the current session: in 2026-27, 5th sem -> 2024 (the 2024-28 batch)."""
-    return session_start_year(today) - (semester - 1) // 2
+    """Admission year of the batch in ``semester`` now: 5th sem in 2026-27 -> 2024."""
+    return qu.batch_in(semester, today or date.today())
 
 
 def semester_for_batch(admitted: int, today: date | None = None) -> int:
     """Which semester a batch is in right now: 2024 batch in Oct 2026 -> 5."""
-    today = today or date.today()
-    base = 2 * (session_start_year(today) - admitted)
-    return base + (1 if today.month >= 7 else 2)
+    return qu.semester_of(admitted, today or date.today())
 
 
-def expand_query(query: str) -> list[str]:
-    """Question tokens plus synonym tokens (deduplicated, order kept)."""
+def expand_query(query: str, extra_terms: list[str] | None = None) -> list[str]:
+    """Question tokens + synonym tokens + ``extra_terms`` (e.g. the batch
+    worked out by query understanding), deduplicated, order kept."""
     tokens = tokenize(query)
     expanded = list(tokens)
     has_semester_word = any(t in ("sem", "semester", "year") for t in tokens)
@@ -95,17 +93,7 @@ def expand_query(query: str) -> list[str]:
         # so "I" or "V" in ordinary questions aren't treated as numbers
         if has_semester_word and tok in NUMBER_FORMS:
             expanded.extend(NUMBER_FORMS[tok])
-            # "5th sem" also means "the batch now in 5th sem" (2024-28):
-            # helps pick this year's syllabus over last year's.
-            n = int(next(f for f in [tok, *NUMBER_FORMS[tok]] if f.isdigit()))
-            years = [int(t) for t in tokens if t.isdigit() and len(t) == 4]
-            if not years:
-                expanded.append(str(batch_for_semester(n)))
-            for y in years:
-                # "2026 5th sem": a 2026 batch can't be in 5th sem yet, so
-                # 2026 is the session year -> the 2024-28 batch.
-                if y + (n - 1) // 2 > session_start_year() + 1:
-                    expanded.append(str(y - (n - 1) // 2))
+    expanded.extend(t.lower() for t in (extra_terms or []))
     seen, result = set(), []
     for tok in expanded:
         if tok not in seen:
@@ -356,21 +344,47 @@ class HybridRetriever:
                 break
         return picked
 
-    def search(self, query: str, top_k: int = config.TOP_K, today: date | None = None) -> list[dict]:
+    def _batch_matches(self, understanding, keyword_wide) -> list[int]:
+        """Best chunks from documents filed under the understood batch and
+        semester ("V SEM · 2024-28 BATCH"), so they are always considered --
+        course lists first, then by keyword score; one per document."""
+        if understanding is None or understanding.empty:
+            return []
+        picked, sources = [], set()
+        ordered = sorted(
+            (i for i, _ in keyword_wide
+             if understanding.label_matches(self.chunks[i].get("link_label", "")) > 0),
+            key=lambda i: self.chunks[i].get("kind") != "course_list",  # stable: keeps score order
+        )
+        for i in ordered:
+            src = self.chunks[i]["source_url"]
+            if src in sources:
+                continue
+            sources.add(src)
+            picked.append(i)
+            if len(picked) >= config.BATCH_MATCH_CHUNKS:
+                break
+        return picked
+
+    def search(self, query: str, top_k: int = config.TOP_K, today: date | None = None,
+               understanding=None) -> list[dict]:
         n = config.CANDIDATES_PER_RETRIEVER
-        keyword_wide = self.bm25.search(expand_query(query), max(n, 300))
+        extra = understanding.search_terms() if understanding is not None else []
+        keyword_wide = self.bm25.search(expand_query(query, extra), max(n, 300))
         keyword_hits = keyword_wide[:n]
         vector_hits = self._vector_search(query, n)
         newest_roles = self._newest_role_mentions(query, keyword_wide)
+        batch_hits = [i for i in self._batch_matches(understanding, keyword_wide) if i not in newest_roles]
+        pinned = newest_roles + batch_hits
 
-        # Reciprocal Rank Fusion, then make sure the newest role mentions
-        # are candidates too.
+        # Reciprocal Rank Fusion, then make sure the pinned chunks (newest
+        # role mentions, documents for the understood batch) are candidates.
         fused: dict[int, float] = defaultdict(float)
         for hits in (keyword_hits, vector_hits):
             for rank, (idx, _score) in enumerate(hits):
                 fused[idx] += 1.0 / (60 + rank)
         ranked = sorted(fused, key=fused.get, reverse=True)
-        ranked = newest_roles + [i for i in ranked if i not in newest_roles]
+        ranked = pinned + [i for i in ranked if i not in pinned]
 
         # Drop near-identical chunks before spending reranker time on them.
         candidates, seen = [], set()
@@ -380,7 +394,7 @@ class HybridRetriever:
                 continue
             seen.add(key)
             candidates.append(idx)
-            if len(candidates) >= config.RERANK_CANDIDATES + len(newest_roles):
+            if len(candidates) >= config.RERANK_CANDIDATES + len(pinned):
                 break
         if not candidates:
             return []
@@ -401,23 +415,27 @@ class HybridRetriever:
         for idx in candidates:
             chunk = dict(self.chunks[idx])
             bonus = recency_bonus(chunk.get("date"), today)
+            # Right batch/semester (+), a different batch's document (-).
+            match = understanding.label_matches(chunk.get("link_label", "")) if understanding is not None else 0
+            batch_bonus = config.BATCH_MATCH_BONUS * match
             chunk["relevance"] = round(float(relevance[idx]), 4)
             chunk["recency_bonus"] = round(bonus, 4)
-            chunk["score"] = float(relevance[idx]) + bonus
+            chunk["batch_bonus"] = round(batch_bonus, 4)
+            chunk["score"] = float(relevance[idx]) + bonus + batch_bonus
             chunk["newest_role_mention"] = idx in newest_roles
             scored.append((idx, chunk))
         scored.sort(key=lambda pair: pair[1]["score"], reverse=True)
 
-        # Newest role mentions are always kept; the rest by score, with at
-        # most MAX_CHUNKS_PER_SOURCE from any one page/PDF.
-        results = [c for i, c in scored if i in newest_roles][:top_k]
+        # Pinned chunks are always kept; the rest by score, with at most
+        # MAX_CHUNKS_PER_SOURCE from any one page/PDF.
+        results = [c for i, c in scored if i in pinned][:top_k]
         per_source: dict[str, int] = defaultdict(int)
         for c in results:
             per_source[c["source_url"]] += 1
         for i, c in scored:
             if len(results) >= top_k:
                 break
-            if i in newest_roles or per_source[c["source_url"]] >= config.MAX_CHUNKS_PER_SOURCE:
+            if i in pinned or per_source[c["source_url"]] >= config.MAX_CHUNKS_PER_SOURCE:
                 continue
             per_source[c["source_url"]] += 1
             results.append(c)

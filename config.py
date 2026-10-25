@@ -112,6 +112,11 @@ EMBEDDING_BATCH_SIZE = _env_int("EMBEDDING_BATCH_SIZE", 32)
 # --- Retrieval ---------------------------------------------------------------
 TOP_K = 6                      # pieces of text handed to the LLM
 TITLE_WEIGHT = 3               # keyword search: a title word counts this many times
+# Query understanding: documents filed under the batch/semester the question
+# is about ("V SEM · 2024-28 BATCH") get this bonus; other batches' get it
+# taken away. And up to this many matching documents are always included.
+BATCH_MATCH_BONUS = 0.3
+BATCH_MATCH_CHUNKS = 2
 CANDIDATES_PER_RETRIEVER = 30  # how many each search method proposes
 # Re-scores the candidates with a model that reads question + text together.
 # The default is small (~90 MB) and fast on a laptop CPU. More accurate but

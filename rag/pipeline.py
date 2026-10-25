@@ -18,6 +18,7 @@ from datetime import date
 import config
 from ingestion.dates import label as date_label
 from rag import llm
+from rag.query_understanding import Understanding, understand
 from rag.retrieval import HybridRetriever, load_retriever, role_timeline, semester_for_batch, session_start_year
 
 log = logging.getLogger("rag.pipeline")
@@ -51,8 +52,8 @@ def index_exists() -> bool:
     return config.FAISS_INDEX_PATH.exists() and config.INDEX_METADATA_PATH.exists()
 
 
-def retrieve(query: str, top_k: int = config.TOP_K) -> list[dict]:
-    return _get_retriever().search(query, top_k=top_k)
+def retrieve(query: str, top_k: int = config.TOP_K, understanding: Understanding | None = None) -> list[dict]:
+    return _get_retriever().search(query, top_k=top_k, understanding=understanding)
 
 
 SYSTEM_PROMPT = """You are the help desk assistant for the Information Technology department (School of IT) at MITS Gwalior.
@@ -66,8 +67,9 @@ Rules:
 3. If the sources do not contain the answer, say so plainly and suggest contacting the department office. Never guess names, dates or numbers.
 4. Cite sources with their [n] markers.
 5. If a "Timeline" is given at the top, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
-6. Batches: "2024-28 batch" = students admitted in 2024. {batch_guide} A question like "5th sem syllabus" without a year means the batch that is in 5th sem now; "2025 students" means the 2025-29 batch. If a source is for a different batch, say which batch it is for.
-7. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
+6. Batches: "2024-28 batch" = students admitted in 2024. {batch_guide} A question like "5th sem syllabus" without a year means the batch that is in 5th sem now; "2025 students" means the 2025-29 batch. If "Question understood as" is given at the top, answer for that batch and semester; use other batches' sources only if nothing else exists, and then say which batch they are for.
+7. Each batch has its own syllabus and course codes. Course codes changed when MITS became a Deemed University (older 7-digit codes like 3160512, newer 8-digit codes like 16243101), so the same subject can have different codes in different batches. Quote course codes exactly as written in the source for the batch asked about; never copy a code from another batch's document. If a "Course list" source is given, use it for "which subjects" questions and list every course in it.
+8. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
 
 
 def batch_guide(today: date | None = None) -> str:
@@ -106,20 +108,27 @@ def build_timeline(query: str, results: list[dict]) -> str:
     return "Timeline of people named with this role in the sources (newest first):\n" + "\n".join(lines)
 
 
-def build_prompt(query: str, results: list[dict], today: date | None = None) -> tuple[str, str]:
+def build_prompt(query: str, results: list[dict], today: date | None = None,
+                 understanding: Understanding | None = None) -> tuple[str, str]:
     """(system prompt, user message) exactly as the LLM will see them."""
     context = build_context(results)
     timeline = build_timeline(query, results)
     system = SYSTEM_PROMPT.format(
         today=(today or date.today()).strftime("%d %B %Y"), batch_guide=batch_guide(today)
     )
-    # The timeline goes first: small models weigh what they read first.
-    head = f"{timeline}\n\n" if timeline else ""
-    return system, f"{head}Sources:\n{context}\n\nQuestion: {query}"
+    head = []
+    if understanding is not None and not understanding.empty:
+        why = f" ({'; '.join(understanding.notes)})" if understanding.notes else ""
+        head.append(f"Question understood as: {understanding.describe()}{why}")
+    if timeline:  # first: small models weigh what they read first
+        head.append(timeline)
+    head_text = "\n\n".join(head) + "\n\n" if head else ""
+    return system, f"{head_text}Sources:\n{context}\n\nQuestion: {query}"
 
 
-def generate_answer(query: str, results: list[dict], today: date | None = None) -> llm.Reply:
-    system, user_message = build_prompt(query, results, today)
+def generate_answer(query: str, results: list[dict], today: date | None = None,
+                    understanding: Understanding | None = None) -> llm.Reply:
+    system, user_message = build_prompt(query, results, today, understanding)
     context = build_context(results)
     reply = llm.generate(system, user_message)
     if not reply.generated:
@@ -129,8 +138,10 @@ def generate_answer(query: str, results: list[dict], today: date | None = None) 
 
 
 def answer(query: str, top_k: int = config.TOP_K) -> dict:
-    results = order_for_prompt(retrieve(query, top_k=top_k))
-    reply = generate_answer(query, results)
+    # Step 0: what is this about? (semester, batch, session, topic)
+    understanding = understand(query)
+    results = order_for_prompt(retrieve(query, top_k=top_k, understanding=understanding))
+    reply = generate_answer(query, results, understanding=understanding)
     return {
         "query": query,
         "answer": reply.text,
@@ -138,6 +149,8 @@ def answer(query: str, top_k: int = config.TOP_K) -> dict:
         "provider": reply.provider,
         "generated": reply.generated,
         "provider_errors": reply.errors,
+        "understood_as": understanding.describe(),
+        "understanding_notes": understanding.notes,
     }
 
 
@@ -153,7 +166,9 @@ def main():
         raise SystemExit(1)
     question = " ".join(args)
     if show_prompt:  # print exactly what the LLM would receive, don't call it
-        system, user_message = build_prompt(question, order_for_prompt(retrieve(question)))
+        u = understand(question)
+        system, user_message = build_prompt(question, order_for_prompt(retrieve(question, understanding=u)),
+                                            understanding=u)
         print("=== SYSTEM ===\n" + system + "\n\n=== USER ===\n" + user_message)
         return
     result = answer(question)

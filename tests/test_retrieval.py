@@ -160,3 +160,29 @@ def test_document_title_beats_long_text_that_repeats_the_words():
                       title="Syllabus - V SEM · 2024-28 BATCH - 5th 11_merged.pdf")
     results = HybridRetriever([minutes, syllabus]).search("it V sem syllabus", top_k=2, today=TODAY)
     assert results[0]["title"].startswith("Syllabus - V SEM")
+
+
+def test_understood_batch_wins_over_other_batches_and_its_course_list_is_included():
+    from rag.query_understanding import understand
+
+    def doc(label, text, kind=None):
+        c = _chunk(text, "2026-07-01", title=f"Syllabus - {label} - file.pdf")
+        c["link_label"] = label
+        if kind:
+            c["kind"] = kind
+        return c
+
+    chunks = [
+        doc("V SEM · 2023-27 BATCH", "Syllabus. Compiler Design. Cloud Computing. Syllabus syllabus."),
+        doc("V SEM · 2024-28 BATCH", "Unit-I GSM. Unit-II GPRS architecture."),
+        doc("V SEM · 2024-28 BATCH", "Course list (all subjects/courses): 16243101 Mobile Computing", kind="course_list"),
+        doc("IV SEM · 2024-28 BATCH", "Syllabus of IoT and Cloud."),
+    ]
+    q = "2026 5th semester syllabus"
+    results = HybridRetriever(chunks).search(q, top_k=3, today=TODAY, understanding=understand(q, TODAY))
+    labels = [r["link_label"] for r in results]
+    assert labels[0] == "V SEM · 2024-28 BATCH"
+    assert any(r.get("kind") == "course_list" for r in results)
+    assert results[0]["batch_bonus"] > 0
+    other = [r for r in results if r["link_label"] == "V SEM · 2023-27 BATCH"]
+    assert all(r["batch_bonus"] < 0 for r in other)

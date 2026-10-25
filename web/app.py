@@ -268,6 +268,8 @@ def query():
             "sources": sources,
             "cited": [s["n"] for s in cited],
             "response_ms": elapsed_ms,
+            # e.g. "5th sem · 2024-28 batch · July-Dec 2026 session · syllabus"
+            "understood_as": result.get("understood_as") or "",
         }
     )
 

@@ -39,6 +39,7 @@ from bs4 import BeautifulSoup
 
 import config
 from ingestion import ocr
+from ingestion.course_list import course_list_text
 from ingestion.link_labels import labels_from_page
 from ingestion.dates import date_from_batch_label, latest_date
 
@@ -344,6 +345,27 @@ def make_chunks(
     return chunks
 
 
+def with_course_list(chunks: list[dict], text: str) -> list[dict]:
+    """Add one extra chunk listing every course (name + code) found in the
+    document, so "which subjects..." questions get the full list."""
+    if not chunks:
+        return chunks
+    first = chunks[0]
+    name = first.get("link_label") or first.get("title") or first["source_url"]
+    listing = course_list_text(text, name)
+    if not listing:
+        return chunks
+    extra = dict(first)
+    extra.update({
+        "id": make_chunk_id(first["source_url"], -1),
+        "chunk_index": -1,
+        "kind": "course_list",
+        "date": first.get("doc_date") or first.get("date"),
+        "text": listing,
+    })
+    return chunks + [extra]
+
+
 def build_upload_chunks() -> list[dict]:
     """Chunks for documents staff uploaded through the admin page."""
     chunks: list[dict] = []
@@ -353,17 +375,17 @@ def build_upload_chunks() -> list[dict]:
         if path.suffix.lower() not in config.UPLOAD_EXTENSIONS:
             continue
         uploaded = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date().isoformat()
-        chunks.extend(
+        text = upload_to_text(path)
+        chunks.extend(with_course_list(
             make_chunks(
                 source_url=f"upload://{path.name}",
                 source_type="upload",
                 local_path=f"uploads/{path.name}",
                 title=path.stem,
-                text=upload_to_text(path),
+                text=text,
                 # an upload with no dates inside is treated as "as of upload day"
                 fallback_date=uploaded,
-            )
-        )
+            ), text))
     return chunks
 
 
@@ -408,16 +430,16 @@ def build_chunks() -> list[dict]:
         html_path = config.DATA_DIR / page["local_path"]
         if not html_path.exists():
             continue
-        chunks.extend(
+        page_text = html_to_text(html_path.read_text(encoding="utf-8"))
+        chunks.extend(with_course_list(
             make_chunks(
                 source_url=page["url"],
                 source_type="page",
                 local_path=page["local_path"],
                 title=page.get("title", ""),
-                text=html_to_text(html_path.read_text(encoding="utf-8")),
+                text=page_text,
                 fallback_date=_last_modified_date(page),
-            )
-        )
+            ), page_text))
 
     for asset in manifest["assets"]:
         ext = asset["extension"]
@@ -436,7 +458,7 @@ def build_chunks() -> list[dict]:
             # Title = page + where it's linked + file name, e.g.
             # "Syllabus - MITS Gwalior - V SEM · 2024-28 BATCH - 5th 11_merged.pdf"
             doc_title = " - ".join(p for p in (referring_title, label, display_name) if p)
-            chunks.extend(
+            chunks.extend(with_course_list(
                 make_chunks(
                     source_url=asset["url"],
                     source_type="pdf",
@@ -446,8 +468,7 @@ def build_chunks() -> list[dict]:
                     # no date in the text -> when the PDF was made -> server date
                     fallback_date=info.get("pdf_date") or fallback,
                     link_label=label,
-                )
-            )
+                ), text))
         else:
             description = (
                 f"{kind.capitalize()} file '{display_name}' "
