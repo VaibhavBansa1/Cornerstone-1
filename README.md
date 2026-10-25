@@ -6,6 +6,8 @@ stores every page and every referenced file (PDF, images, audio, video),
 then embeds the extracted content and serves it through a retrieval-augmented
 generation (RAG) query pipeline.
 
+> **New here? Read [docs/FEATURES.md](docs/FEATURES.md)** — a short, plain-language guide to every feature: why it exists, what it does and where the code is.
+
 ## Scope guarantees
 
 - **Domain-locked**: the crawler only ever contacts `web.mitsgwalior.in`
