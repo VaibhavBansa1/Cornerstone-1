@@ -109,8 +109,16 @@ def test_role_timeline_lists_named_holders_newest_first():
          "date": "2026-07-27"},
     ]
     rows = role_timeline("Who is the HOD?", results)
-    assert rows[0] == ("2026-07-27", "Dr. Punit K Johari Dean, School of IT", 2)
+    assert rows[0] == ("2026-07-27", "Dr. Punit K Johari, Dean, School of IT", 2)
     assert rows[1][1].startswith("Dr. Sanjiv Sharma")
     coord = role_timeline("time table coordinator kaun hai", results)
-    assert coord[0][1] == "Prof. Vikas Sejwar Time Table Coordinator"
+    assert coord[0][1] == "Prof. Vikas Sejwar, Time Table Coordinator"
     assert role_timeline("what is the vision", results) == []
+
+
+def test_role_holder_pairs_the_nearest_name_not_the_first_in_a_list():
+    from rag.retrieval import role_holders
+
+    text = "Ms. Surbhi Gupta\nMs. Nidhi Saxena\n(Dr. Punit Kumar Johari)\nDean, SoIT"
+    assert role_holders(text, {"dean"}) == [("Dr. Punit Kumar Johari", "Dean, SoIT")]
+    assert role_holders("HoD: Dr. Sanjiv Sharma", {"hod"}) == [("Dr. Sanjiv Sharma", "HoD")]

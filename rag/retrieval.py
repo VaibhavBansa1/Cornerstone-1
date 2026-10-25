@@ -169,6 +169,57 @@ def _role_holder_pattern(role_words: set[str]) -> re.Pattern:
     )
 
 
+_NAME_RE = re.compile(_NAME)
+_TITLE_WORDS = {"professor", "&", "and", "associate", "assistant", "time", "table", "time-table", "prof", "deputy", "vice"}
+
+
+def role_holders(text: str, role_words: set[str]) -> list[tuple[str, str]]:
+    """(name, title) pairs, pairing each title with the NEAREST name.
+
+    College documents usually put the name just before the title
+    ("(Dr. Punit K Johari)\nDean, School of IT"), sometimes after it
+    ("HoD: Dr. Sanjiv Sharma"). Lists of names are common, so the closest
+    name wins -- never just the first one in range.
+    """
+    roles = "|".join(sorted(re.escape(r) for r in role_words))
+    pairs = []
+    for m in re.finditer(rf"\b(?:{roles})\b", text, re.I):
+        before = text[max(0, m.start() - 45): m.start()]
+        names_before = list(_NAME_RE.finditer(before))
+        name = None
+        if names_before:
+            last = names_before[-1]
+            # the name must not itself end with the title word we're on
+            name = last.group(0)
+        else:
+            after = _NAME_RE.search(text, m.end(), m.end() + 45)
+            name = after.group(0) if after else None
+        if not name:
+            continue
+        name = re.sub(r"\s+", " ", name).strip()
+        # drop title words the greedy name pattern may have swallowed
+        name = re.split(rf"\s+(?:{roles}|Professor|Associate|Assistant|Time|Table|Coordinator)\b", name, flags=re.I)[0]
+        # Title = title-ish words just before the role on the same line
+        # ("Professor &", "Time Table") + the role + the rest of its line,
+        # stopping before any other name.
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        prefix_words = re.split(r"[\s,()]+", text[line_start: m.start()])
+        prefix = []
+        for w in reversed([w for w in prefix_words if w]):
+            if w.lower().strip(".") in _TITLE_WORDS:
+                prefix.insert(0, w)
+            else:
+                break
+        line_end = text.find("\n", m.end())
+        rest = text[m.end(): (m.end() + 35) if line_end == -1 else min(line_end, m.end() + 35)]
+        other = _NAME_RE.search(rest)
+        if other:
+            rest = rest[: other.start()]
+        title = re.sub(r"\s+", " ", " ".join(prefix + [m.group(0) + rest])).strip(" ,;:()-")
+        pairs.append((name.strip(" ,;:()"), title))
+    return pairs
+
+
 def role_timeline(query: str, results: list[dict]) -> list[tuple[str, str, int]]:
     """For role questions: (date, "Dr. X ... Dean, School of IT", source n)
     for every named role holder in the results, newest first. Handed to the
@@ -181,15 +232,10 @@ def role_timeline(query: str, results: list[dict]) -> list[tuple[str, str, int]]
     for r in roles:
         role_words.update(t for p in config.QUERY_SYNONYMS.get(r, []) for t in tokenize(p))
     role_words &= config.ROLE_TERMS
-    pattern = _role_holder_pattern(role_words)
     seen, rows = set(), []
     for n, chunk in enumerate(results, 1):
-        text = chunk["text"]
-        for m in pattern.finditer(text):
-            # include the rest of the title's line: "Dean" -> "Dean, School of IT"
-            line_end = text.find("\n", m.end())
-            rest = text[m.end(): m.end() + 30 if line_end == -1 else min(line_end, m.end() + 30)]
-            snippet = re.sub(r"[\s()]+", " ", m.group(0) + rest).strip(" ,;:")
+        for name, title in role_holders(chunk["text"], role_words):
+            snippet = f"{name}, {title}"
             key = (chunk.get("date"), snippet.lower())
             if key not in seen:
                 seen.add(key)
