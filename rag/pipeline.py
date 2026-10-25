@@ -18,7 +18,7 @@ from datetime import date
 import config
 from ingestion.dates import label as date_label
 from rag import llm
-from rag.retrieval import HybridRetriever, load_retriever
+from rag.retrieval import HybridRetriever, load_retriever, role_timeline
 
 log = logging.getLogger("rag.pipeline")
 
@@ -65,7 +65,8 @@ Rules:
 2. The same post can have different titles in different years (e.g. "HoD", "Professor & Head", "Dean, School of IT"). Use the exact title the newest source uses, and mention if the title changed.
 3. If the sources do not contain the answer, say so plainly and suggest contacting the department office. Never guess names, dates or numbers.
 4. Cite sources with their [n] markers.
-5. Reply in the same language the student used (English, Hindi or Hinglish). Keep it short and clear."""
+5. If a "Timeline" is given at the end, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
+6. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi in English letters, e.g. "kaun hai") -> Hinglish answer; Hindi -> Hindi. Keep it short and clear."""
 
 
 def build_context(results: list[dict]) -> str:
@@ -83,8 +84,19 @@ def order_for_prompt(results: list[dict]) -> list[dict]:
     return sorted(results, key=lambda r: r.get("date") or "", reverse=True)
 
 
+def build_timeline(query: str, results: list[dict]) -> str:
+    rows = role_timeline(query, results)
+    if not rows:
+        return ""
+    lines = [f"- {date_label(d)}: {snippet} [{n}]" for d, snippet, n in rows]
+    return "Timeline of people named with this role in the sources (newest first):\n" + "\n".join(lines)
+
+
 def generate_answer(query: str, results: list[dict], today: date | None = None) -> llm.Reply:
     context = build_context(results)
+    timeline = build_timeline(query, results)
+    if timeline:
+        context = f"{context}\n\n{timeline}"
     system = SYSTEM_PROMPT.format(today=(today or date.today()).strftime("%d %B %Y"))
     user_message = f"Sources:\n{context}\n\nQuestion: {query}"
     reply = llm.generate(system, user_message)

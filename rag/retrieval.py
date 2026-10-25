@@ -53,13 +53,29 @@ def tokenize(text: str) -> list[str]:
     return [t for t in (m.group(0).lower() for m in _TOKEN.finditer(text)) if t not in STOPWORDS]
 
 
+# Semester/year numbers are written many ways: 5th, 5, fifth, V, Semester-V.
+_ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii"]
+_WORDS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"]
+_SUFFIX = ["st", "nd", "rd", "th", "th", "th", "th", "th"]
+NUMBER_FORMS: dict[str, list[str]] = {}
+for _n in range(1, 9):
+    _forms = [str(_n), f"{_n}{_SUFFIX[_n - 1]}", _ROMAN[_n - 1], _WORDS[_n - 1]]
+    for _f in _forms:
+        NUMBER_FORMS[_f] = [x for x in _forms if x != _f]
+
+
 def expand_query(query: str) -> list[str]:
     """Question tokens plus synonym tokens (deduplicated, order kept)."""
     tokens = tokenize(query)
     expanded = list(tokens)
+    has_semester_word = any(t in ("sem", "semester", "year") for t in tokens)
     for tok in tokens:
         for phrase in config.QUERY_SYNONYMS.get(tok, []):
             expanded.extend(tokenize(phrase))
+        # only widen numbers when they're about a semester/year ("5th sem"),
+        # so "I" or "V" in ordinary questions aren't treated as numbers
+        if has_semester_word and tok in NUMBER_FORMS:
+            expanded.extend(NUMBER_FORMS[tok])
     seen, result = set(), []
     for tok in expanded:
         if tok not in seen:
@@ -145,10 +161,41 @@ def _role_holder_pattern(role_words: set[str]) -> re.Pattern:
     """Matches a person's name close to a role word, e.g.
     "(Dr. Punit K Johari) Dean, School of IT" or "HoD: Dr. Sanjiv Sharma"."""
     roles = "|".join(sorted(re.escape(r) for r in role_words))
+    # PDFs often put the name and the title on separate lines, so up to 40
+    # characters of anything (line breaks included) may sit between them.
     return re.compile(
-        rf"{_NAME}[^\n]{{0,40}}?\b(?:{roles})\b|\b(?:{roles})\b[^\n]{{0,40}}?{_NAME}",
+        rf"{_NAME}[\s\S]{{0,40}}?\b(?:{roles})\b|\b(?:{roles})\b[\s\S]{{0,40}}?{_NAME}",
         re.I,
     )
+
+
+def role_timeline(query: str, results: list[dict]) -> list[tuple[str, str, int]]:
+    """For role questions: (date, "Dr. X ... Dean, School of IT", source n)
+    for every named role holder in the results, newest first. Handed to the
+    LLM so it doesn't have to work out who came when by itself."""
+    words = {m.group(0).lower() for m in _TOKEN.finditer(query)}
+    roles = words & config.ROLE_TERMS
+    if not roles:
+        return []
+    role_words = set(roles)
+    for r in roles:
+        role_words.update(t for p in config.QUERY_SYNONYMS.get(r, []) for t in tokenize(p))
+    role_words &= config.ROLE_TERMS
+    pattern = _role_holder_pattern(role_words)
+    seen, rows = set(), []
+    for n, chunk in enumerate(results, 1):
+        text = chunk["text"]
+        for m in pattern.finditer(text):
+            # include the rest of the title's line: "Dean" -> "Dean, School of IT"
+            line_end = text.find("\n", m.end())
+            rest = text[m.end(): m.end() + 30 if line_end == -1 else min(line_end, m.end() + 30)]
+            snippet = re.sub(r"[\s()]+", " ", m.group(0) + rest).strip(" ,;:")
+            key = (chunk.get("date"), snippet.lower())
+            if key not in seen:
+                seen.add(key)
+                rows.append((chunk.get("date") or "", snippet, n))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return rows[:12]
 
 
 def _dedupe_key(text: str) -> str:
