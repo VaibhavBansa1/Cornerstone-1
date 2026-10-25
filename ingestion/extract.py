@@ -81,7 +81,25 @@ def html_to_text(html: str) -> str:
     return normalize_text(text)
 
 
+PDF_CACHE_VERSION = "1"  # bump to force re-extraction of every PDF
+
+
+def _pdf_cache_path(path: Path) -> Path:
+    stat = path.stat()
+    key = f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}|{PDF_CACHE_VERSION}"
+    return config.PROCESSED_DIR / "pdf_text_cache" / (hashlib.sha1(key.encode()).hexdigest() + ".txt")
+
+
 def pdf_to_text(path: Path) -> str:
+    """PDF -> text. Reading PDFs is slow (scanned ones take ~20 s and give
+    no text), so the result is cached; a rebuild only re-reads PDFs that
+    are new or changed."""
+    try:
+        cache = _pdf_cache_path(path)
+        if cache.exists():
+            return cache.read_text(encoding="utf-8")
+    except OSError:
+        cache = None
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -89,10 +107,17 @@ def pdf_to_text(path: Path) -> str:
         return ""
     try:
         reader = PdfReader(str(path))
-        return normalize_text("\n".join(page.extract_text() or "" for page in reader.pages))
+        text = normalize_text("\n".join(page.extract_text() or "" for page in reader.pages))
     except Exception as exc:  # malformed PDFs happen in the wild
         log.warning("Failed to extract text from %s: %s", path, exc)
-        return ""
+        text = ""
+    if cache is not None:
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(text, encoding="utf-8")
+        except OSError:
+            pass
+    return text
 
 
 def docx_to_text(path: Path) -> str:
