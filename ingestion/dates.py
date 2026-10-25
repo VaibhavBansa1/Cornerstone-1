@@ -122,11 +122,33 @@ def find_dates(text: str, today: date | None = None) -> tuple[list[date], list[d
     return specific, bare
 
 
-def latest_date(text: str, today: date | None = None) -> str | None:
-    """Newest date mentioned in ``text`` as 'YYYY-MM-DD', or None."""
+def latest_date(text: str, today: date | None = None, allow_bare_years: bool = True) -> str | None:
+    """Newest date mentioned in ``text`` as 'YYYY-MM-DD', or None.
+
+    Bare years ("2000", "2014") are the weakest clue -- often a book's
+    publication year -- so callers can skip them and try better clues first.
+    """
     specific, bare = find_dates(text, today)
-    pool = specific or bare
+    pool = specific or (bare if allow_bare_years else [])
     return max(pool).isoformat() if pool else None
+
+
+_ROMAN_SEM = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8}
+
+
+def date_from_batch_label(label: str) -> str | None:
+    """'V SEM · 2024-28 BATCH' -> when that semester starts: 2026-07-01.
+
+    Odd semesters start in July, even ones in January."""
+    m = re.search(r"\b(VIII|VII|VI|IV|V|III|II|I|[1-8])(?:st|nd|rd|th)?\s*SEM\b.*?\b((?:19|20)\d{2})\s*-\s*\d{2,4}", label or "", re.I)
+    if not m:
+        return None
+    raw = m.group(1).upper()
+    sem = int(raw) if raw.isdigit() else _ROMAN_SEM[raw]
+    admitted = int(m.group(2))
+    if sem % 2:
+        return date(admitted + (sem - 1) // 2, 7, 1).isoformat()
+    return date(admitted + sem // 2, 1, 1).isoformat()
 
 
 def label(iso: str | None) -> str:
