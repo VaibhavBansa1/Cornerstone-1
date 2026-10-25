@@ -182,8 +182,12 @@ class HybridRetriever:
             texts = [f"{self.chunks[i].get('title', '')}\n{self.chunks[i]['text']}" for i in candidates]
             relevance = self.reranker.score(query, texts)
         else:
-            top = max(fused[i] for i in candidates)
-            relevance = [fused[i] / top for i in candidates]
+            # Fused scores sit very close together (1/60 vs 1/63 ...), which
+            # would let the recency bonus overpower relevance. Spread them
+            # over 0..1 so rank order still matters most.
+            raw = [fused[i] for i in candidates]
+            lo, hi = min(raw), max(raw)
+            relevance = [1.0 if hi == lo else (s - lo) / (hi - lo) for s in raw]
 
         results = []
         for idx, rel in zip(candidates, relevance):

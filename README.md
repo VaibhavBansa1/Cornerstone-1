@@ -31,18 +31,42 @@ generation (RAG) query pipeline.
    to `data/raw/pages/`, binary assets to `data/raw/assets/`, and an overall
    `data/manifest.json` describing what was collected and where each item
    came from.
-2. **Ingest** (`ingestion/extract.py`) — converts HTML pages to clean text
-   (stripping nav/script/style/footer), extracts text from PDFs, and emits a
-   short descriptive record for images/audio/video (filename + referring
-   page + alt text) so they remain searchable and citable even though they
-   have no text body. Everything is chunked (~1000 chars, 150 overlap) into
-   `data/processed/chunks.jsonl`.
-3. **Embed & index** (`rag/embed_index.py`) — embeds every chunk locally
-   with `sentence-transformers/all-MiniLM-L6-v2` (no API key required) and
-   builds a FAISS cosine-similarity index in `data/index/`.
-4. **Query** (`rag/pipeline.py`) — embeds the question, retrieves the top-k
-   chunks, and hands them to a pluggable generation backend that answers
-   using only that retrieved context, citing sources.
+2. **Ingest** (`ingestion/extract.py`, `ingestion/dates.py`) -- converts
+   HTML pages to clean text (inline tags no longer split words), extracts
+   PDF text (ligatures fixed), and emits a short record for images/audio/
+   video. Text is split on paragraph/sentence boundaries (~900 chars, 150
+   overlap) into `data/processed/chunks.jsonl`. **Every chunk gets a date**:
+   the newest date mentioned in it ("w.e.f. 27/07/2026", "Session: July-Dec
+   2026", "10th March 2025", "2021-22"), falling back to the document's
+   newest date or the server's Last-Modified header.
+3. **Embed & index** (`rag/embeddings.py`, `rag/embed_index.py`) -- embeds
+   each chunk (title + date header + text) with
+   `intfloat/multilingual-e5-small` (English/Hindi/Hinglish) on the GPU if
+   PyTorch can see one, else the CPU, into a FAISS index. `index_info.json`
+   records which model built it; a mismatch is reported instead of giving
+   silently wrong results.
+4. **Retrieve** (`rag/retrieval.py`) -- hybrid search: BM25 keyword search
+   (with synonyms such as HOD -> head / dean) + vector search, merged with
+   Reciprocal Rank Fusion, de-duplicated, re-scored by a cross-encoder
+   reranker, plus a small **recency bonus** so the newest of several
+   similar chunks wins.
+5. **Answer** (`rag/pipeline.py`, `rag/llm/`) -- the chunks are shown to
+   the LLM newest-first with their dates and today's date, with rules to
+   treat the most recent source as current and older ones as "previously".
+   The LLM comes from a **fallback chain** of providers.
+
+### How the parts connect (each can be swapped without touching the others)
+
+```
+scraper/crawler.py ─► ingestion/extract.py ─► rag/embed_index.py
+                         (+ dates.py)              (embeddings.py)
+                                                        │
+web/app.py ─► rag/pipeline.py ─► rag/retrieval.py ◄─────┘
+                    │
+                    └─► rag/llm/  registry.py ─► openrouter / groq / github /
+                                                 gemini / anthropic / openai /
+                                                 lm studio / ollama
+```
 
 ## Web interface
 
@@ -73,11 +97,8 @@ python -m web.app        # http://localhost:5000  (admin: /admin)
 from `pyproject.toml`/`uv.lock` for you -- no manual `venv`/`pip` steps.
 
 ```bash
-uv sync                        # core deps only
-uv sync --extra anthropic      # + Anthropic SDK
-uv sync --extra openai         # + OpenAI SDK (also covers OpenAI-compatible local servers)
-uv sync --extra gemini         # + Gemini SDK
-uv sync --all-extras           # all three generation backends
+uv sync                        # CPU (laptop)
+uv sync --extra cuda           # NVIDIA GPU build of PyTorch
 uv sync --group dev            # add pytest for running the test suite
 
 # One-shot: crawl -> ingest -> embed & index
@@ -101,7 +122,7 @@ both `pyproject.toml` and `uv.lock`.
 ### With pip
 
 ```bash
-pip install -r requirements.txt   # or just the SDK for the backend you use, see below
+pip install requests beautifulsoup4 lxml pypdf sentence-transformers faiss-cpu numpy flask
 
 # One-shot: crawl -> ingest -> embed & index
 python run_pipeline.py
@@ -110,28 +131,55 @@ python run_pipeline.py
 python -m rag.pipeline "What programs does the IT department offer?"
 ```
 
-### Choosing a generation backend
+### Choosing LLM providers (with automatic fallback)
 
-Set exactly one of these env vars (or run a local Ollama server) and the
-pipeline auto-detects it, in this priority order: Anthropic → OpenAI →
-Gemini → Ollama. No env var and no local Ollama running means
-retrieval-only mode: it prints the raw matched chunks instead of a
-generated answer.
+Set one or more API keys. With `LLM_PROVIDERS=auto` (the default) every
+provider whose key is set is tried in this order, then a local Ollama if
+it is running: OpenRouter -> Groq -> GitHub Models -> Gemini -> Anthropic
+-> OpenAI -> local OpenAI-compatible server -> Ollama. If one fails or is
+rate limited, the next one answers (a rate-limited provider is skipped for
+60 s). If none answers, the chat shows the matching passages instead.
 
-| Backend | Setup |
-|---|---|
-| Anthropic (Claude) | `export ANTHROPIC_API_KEY=sk-ant-...` |
-| OpenAI | `export OPENAI_API_KEY=sk-...` (override model with `OPENAI_MODEL`) |
-| Local model via an OpenAI-compatible server (LM Studio, llama.cpp, vLLM) | `export OPENAI_API_KEY=anything OPENAI_BASE_URL=http://localhost:1234/v1 OPENAI_MODEL=<your-local-model-name>` |
-| Gemini | `export GEMINI_API_KEY=...` (or `GOOGLE_API_KEY`; override model with `GEMINI_MODEL`) |
-| Local model via Ollama | `ollama pull llama3.1 && ollama serve` (defaults to `http://localhost:11434`, model `llama3.1` — override with `OLLAMA_BASE_URL` / `OLLAMA_MODEL`) |
-| $env:key = "value"     | for PowerShell |
+Pin your own order, e.g. for a demo: `LLM_PROVIDERS=openrouter,groq,ollama`.
+No SDKs are needed -- all providers are called over plain HTTP.
 
-To force a specific backend instead of auto-detecting, set
-`RAG_GENERATION_PROVIDER` to `anthropic`, `openai`, `gemini`, `ollama`, or
-`none`. You only need to `pip install` the SDK for the backend you
-actually use (`anthropic`, `openai`, or `google-generativeai` — Ollama
-needs none beyond `requests`).
+| Provider | Key env var | Model env var (default) |
+|---|---|---|
+| OpenRouter (free `:free` models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`google/gemma-4-31b-it:free`) |
+| Groq (free tier) | `GROQ_API_KEY` | `GROQ_MODEL` (`llama-3.3-70b-versatile`) |
+| GitHub Models (free with a GitHub token) | `GITHUB_MODELS_TOKEN` | `GITHUB_MODELS_MODEL` (`openai/gpt-4.1-mini`) |
+| Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | `GEMINI_MODEL` |
+| Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` |
+| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` |
+| LM Studio / llama.cpp / vLLM | set `OPENAI_COMPAT_BASE_URL=http://localhost:1234/v1` | `OPENAI_COMPAT_MODEL` |
+| Ollama (local, no key) | -- (`OLLAMA_BASE_URL`) | `OLLAMA_MODEL` (falls back to the first pulled model) |
+
+Free model names change over time; check the provider's model list and
+override the `*_MODEL` variable if a default disappears.
+
+PowerShell: `$env:OPENROUTER_API_KEY = "sk-or-..."`  
+bash: `export OPENROUTER_API_KEY=sk-or-...`
+
+Adding a provider = one class in `rag/llm/` (or just a new entry in
+`config.PROVIDER_SETTINGS` if it speaks the OpenAI format).
+
+### GPU or CPU
+
+`EMBEDDING_DEVICE=auto` (default) uses an NVIDIA GPU when PyTorch sees
+one, otherwise the CPU. On a GPU machine install the CUDA build of
+PyTorch with `uv sync --extra cuda`; a laptop just uses `uv sync`. An index
+built on the GPU works on the CPU and vice versa, as long as the
+embedding model is the same. On a slow laptop, `RERANKER_MODEL=none`
+makes answers faster at some cost in accuracy.
+
+### Rebuilding after changes
+
+Changed the embedding model or chunking? Rebuild from the already
+downloaded data without crawling again:
+
+```bash
+uv run run_pipeline.py --skip-crawl
+```
 
 Each stage can also be run independently:
 
