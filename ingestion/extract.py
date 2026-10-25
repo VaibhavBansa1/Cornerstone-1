@@ -8,9 +8,15 @@ Reads ``config.MANIFEST_PATH`` (written by scraper.crawler) and produces
       "source_url": "...",
       "source_type": "page" | "pdf" | "image" | "audio" | "video",
       "local_path": "raw/pages/....html",
+      "title": "...",
       "chunk_index": 0,
+      "date": "2026-07-27",      # newest date mentioned in this chunk
+      "doc_date": "2026-07-27",  # newest date in the whole document
       "text": "..."
     }
+
+Dates come from ingestion/dates.py and are what let retrieval prefer
+current information over old documents.
 
 Images/audio/video have no extractable text body, so a short descriptive
 chunk (title of the referring page + filename + any alt text) is emitted
@@ -23,26 +29,56 @@ import hashlib
 import json
 import logging
 import re
+import unicodedata
 import zipfile
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 
 import config
+from ingestion.dates import latest_date
 
 log = logging.getLogger("ingest")
 
-TEXT_STRIP_TAGS = ["script", "style", "nav", "footer", "header", "noscript"]
+TEXT_STRIP_TAGS = ["script", "style", "nav", "footer", "header", "noscript", "aside", "form"]
+
+# Tags that start a new line of text. Everything else (span, sup, a, b ...)
+# is "inline" and stays glued to its neighbours, so "7<sup>th</sup> March"
+# becomes "7th March" instead of "7\nth\nMarch".
+BLOCK_TAGS = {
+    "p", "div", "section", "article", "main", "li", "ul", "ol", "tr", "table",
+    "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "dd", "dt", "dl",
+    "figure", "figcaption", "hr", "tbody", "thead",
+}
+CELL_TAGS = {"td", "th"}
+
+
+def normalize_text(text: str) -> str:
+    """Fix PDF ligatures (ﬁ -> fi), odd spaces, and collapse whitespace."""
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace(" ", " ").replace("�", "")
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def html_to_text(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(TEXT_STRIP_TAGS):
         tag.decompose()
-    text = soup.get_text(separator="\n")
-    lines = [line.strip() for line in text.splitlines()]
-    lines = [line for line in lines if line]
-    return "\n".join(lines)
+    # Only the page's main content, when the site layout provides it.
+    root = soup.find(id=config.MAIN_CONTENT_CONTAINER_ID) or soup
+    for br in root.find_all("br"):
+        br.replace_with("\n")
+    for tag in root.find_all(BLOCK_TAGS):
+        tag.insert_before("\n")
+        tag.insert_after("\n")
+    for tag in root.find_all(CELL_TAGS):
+        tag.insert_after(" | ")
+    text = root.get_text(separator="")
+    text = re.sub(r"(\s*\|\s*)+\n", "\n", text)  # drop trailing cell separators
+    return normalize_text(text)
 
 
 def pdf_to_text(path: Path) -> str:
@@ -53,7 +89,7 @@ def pdf_to_text(path: Path) -> str:
         return ""
     try:
         reader = PdfReader(str(path))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        return normalize_text("\n".join(page.extract_text() or "" for page in reader.pages))
     except Exception as exc:  # malformed PDFs happen in the wild
         log.warning("Failed to extract text from %s: %s", path, exc)
         return ""
@@ -72,20 +108,82 @@ def docx_to_text(path: Path) -> str:
     return "\n".join(line for line in lines if line.strip())
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+
+
+def _hard_split(text: str, size: int, overlap: int) -> list[str]:
+    """Last resort for text with no line or sentence breaks at all."""
+    pieces, start = [], 0
+    while start < len(text):
+        end = start + size
+        pieces.append(text[start:end])
+        if end >= len(text):
+            break
+        start = end - overlap
+    return pieces
+
+
+def _units(text: str, size: int, overlap: int) -> list[tuple[str, bool]]:
+    """Break text into paragraphs/sentences no longer than ``size``.
+
+    Returns (piece, came_from_hard_split) pairs.
+    """
+    units: list[tuple[str, bool]] = []
+    for para in text.split("\n"):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= size:
+            units.append((para, False))
+            continue
+        for sentence in _SENTENCE_END.split(para):
+            if len(sentence) <= size:
+                units.append((sentence, False))
+            else:
+                units.extend((piece, True) for piece in _hard_split(sentence, size, overlap))
+    return units
+
+
+def _tail(text: str, overlap: int) -> str:
+    """The last ``overlap`` characters, starting at a word boundary."""
+    if len(text) <= overlap:
+        return text
+    tail = text[-overlap:]
+    space = tail.find(" ")
+    return tail[space + 1:] if 0 <= space < len(tail) - 1 else tail
+
+
 def chunk_text(text: str, size: int = config.CHUNK_SIZE_CHARS, overlap: int = config.CHUNK_OVERLAP_CHARS):
+    """Split text into ~``size``-character chunks on paragraph/sentence
+    boundaries, repeating ~``overlap`` characters between neighbours so a
+    fact that sits on a boundary is still found whole in one of them."""
     text = text.strip()
     if not text:
         return []
     if len(text) <= size:
         return [text]
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + size
-        chunks.append(text[start:end])
-        if end >= len(text):
-            break
-        start = end - overlap
+
+    chunks: list[str] = []
+    current = ""
+    for piece, hard in _units(text, size, overlap):
+        if hard:  # hard-split pieces already overlap each other
+            if current:
+                chunks.append(current)
+            chunks.append(piece)
+            current = ""
+            continue
+        candidate = f"{current}\n{piece}" if current else piece
+        if len(candidate) <= size:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+            carry = _tail(current, overlap)
+            current = f"{carry}\n{piece}" if len(carry) + 1 + len(piece) <= size else piece
+        else:
+            current = piece
+    if current:
+        chunks.append(current)
     return chunks
 
 
@@ -104,6 +202,59 @@ def upload_to_text(path: Path) -> str:
     return ""
 
 
+def _last_modified_date(entry: dict) -> str | None:
+    """The server's Last-Modified header, if it looks like a real date.
+
+    Dynamic pages often report "right now" as Last-Modified, which says
+    nothing about the content, so it is ignored when it equals fetch time.
+    """
+    raw = entry.get("last_modified")
+    if not raw:
+        return None
+    try:
+        modified = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    fetched = entry.get("fetched_at")
+    if fetched and abs(modified.timestamp() - float(fetched)) < 24 * 3600:
+        return None
+    return modified.date().isoformat()
+
+
+def make_chunks(
+    *,
+    source_url: str,
+    source_type: str,
+    local_path: str,
+    title: str,
+    text: str,
+    fallback_date: str | None = None,
+) -> list[dict]:
+    """Chunk one document and stamp every chunk with a date.
+
+    ``doc_date``: newest date anywhere in the document (or the fallback).
+    ``date``:     newest date inside that chunk, else ``doc_date``.
+    """
+    pieces = chunk_text(text)
+    doc_date = latest_date(f"{title}\n{text}") or fallback_date
+    chunks = []
+    for i, piece in enumerate(pieces):
+        chunks.append(
+            {
+                "id": make_chunk_id(source_url, i),
+                "source_url": source_url,
+                "source_type": source_type,
+                "local_path": local_path,
+                "title": title,
+                "chunk_index": i,
+                "date": latest_date(piece) or doc_date,
+                "doc_date": doc_date,
+                "text": piece,
+            }
+        )
+    return chunks
+
+
 def build_upload_chunks() -> list[dict]:
     """Chunks for documents staff uploaded through the admin page."""
     chunks: list[dict] = []
@@ -112,20 +263,27 @@ def build_upload_chunks() -> list[dict]:
     for path in sorted(config.UPLOADS_DIR.iterdir()):
         if path.suffix.lower() not in config.UPLOAD_EXTENSIONS:
             continue
-        source_url = f"upload://{path.name}"
-        for i, piece in enumerate(chunk_text(upload_to_text(path))):
-            chunks.append(
-                {
-                    "id": make_chunk_id(source_url, i),
-                    "source_url": source_url,
-                    "source_type": "upload",
-                    "local_path": f"uploads/{path.name}",
-                    "title": path.stem,
-                    "chunk_index": i,
-                    "text": piece,
-                }
+        uploaded = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date().isoformat()
+        chunks.extend(
+            make_chunks(
+                source_url=f"upload://{path.name}",
+                source_type="upload",
+                local_path=f"uploads/{path.name}",
+                title=path.stem,
+                text=upload_to_text(path),
+                # an upload with no dates inside is treated as "as of upload day"
+                fallback_date=uploaded,
             )
+        )
     return chunks
+
+
+MEDIA_KIND_BY_EXT = {
+    **{ext: "document" for ext in config.DOCUMENT_EXTENSIONS},
+    **{ext: "image" for ext in config.IMAGE_EXTENSIONS},
+    **{ext: "audio" for ext in config.AUDIO_EXTENSIONS},
+    **{ext: "video" for ext in config.VIDEO_EXTENSIONS},
+}
 
 
 def build_chunks() -> list[dict]:
@@ -135,77 +293,61 @@ def build_chunks() -> list[dict]:
         return build_upload_chunks()
     manifest = json.loads(config.MANIFEST_PATH.read_text(encoding="utf-8"))
 
-    # Map asset URL -> manifest entry so we can pull alt text / referring
-    # page titles from the pages that mention them.
     page_title_by_url = {p["url"]: p.get("title", "") for p in manifest["pages"]}
 
     for page in manifest["pages"]:
         html_path = config.DATA_DIR / page["local_path"]
         if not html_path.exists():
             continue
-        text = html_to_text(html_path.read_text(encoding="utf-8"))
-        for i, piece in enumerate(chunk_text(text)):
-            chunks.append(
-                {
-                    "id": make_chunk_id(page["url"], i),
-                    "source_url": page["url"],
-                    "source_type": "page",
-                    "local_path": page["local_path"],
-                    "title": page.get("title", ""),
-                    "chunk_index": i,
-                    "text": piece,
-                }
+        chunks.extend(
+            make_chunks(
+                source_url=page["url"],
+                source_type="page",
+                local_path=page["local_path"],
+                title=page.get("title", ""),
+                text=html_to_text(html_path.read_text(encoding="utf-8")),
+                fallback_date=_last_modified_date(page),
             )
-
-    media_kind_by_ext = {}
-    for ext in config.DOCUMENT_EXTENSIONS:
-        media_kind_by_ext[ext] = "document"
-    for ext in config.IMAGE_EXTENSIONS:
-        media_kind_by_ext[ext] = "image"
-    for ext in config.AUDIO_EXTENSIONS:
-        media_kind_by_ext[ext] = "audio"
-    for ext in config.VIDEO_EXTENSIONS:
-        media_kind_by_ext[ext] = "video"
+        )
 
     for asset in manifest["assets"]:
         ext = asset["extension"]
-        kind = media_kind_by_ext.get(ext, "document")
+        kind = MEDIA_KIND_BY_EXT.get(ext, "document")
         local_path = config.DATA_DIR / asset["local_path"]
         referring_title = page_title_by_url.get(asset["referenced_from"], "")
         display_name = asset.get("original_filename") or local_path.name
+        fallback = _last_modified_date(asset)
 
         if kind == "document" and ext == ".pdf" and local_path.exists():
             text = pdf_to_text(local_path)
-            pieces = chunk_text(text) if text.strip() else []
-            if not pieces:
-                pieces = [f"PDF document '{display_name}' referenced from page '{referring_title}'."]
-            for i, piece in enumerate(pieces):
-                chunks.append(
-                    {
-                        "id": make_chunk_id(asset["url"], i),
-                        "source_url": asset["url"],
-                        "source_type": "pdf",
-                        "local_path": asset["local_path"],
-                        "title": referring_title,
-                        "chunk_index": i,
-                        "text": piece,
-                    }
+            if not text.strip():
+                text = f"PDF document '{display_name}' referenced from page '{referring_title}'."
+            # The file name often carries the date ("TT_July_2026.pdf").
+            doc_title = f"{referring_title} - {display_name}" if referring_title else display_name
+            chunks.extend(
+                make_chunks(
+                    source_url=asset["url"],
+                    source_type="pdf",
+                    local_path=asset["local_path"],
+                    title=doc_title,
+                    text=text,
+                    fallback_date=fallback,
                 )
+            )
         else:
             description = (
                 f"{kind.capitalize()} file '{display_name}' "
                 f"referenced from page '{referring_title}' ({asset['referenced_from']})."
             )
-            chunks.append(
-                {
-                    "id": make_chunk_id(asset["url"], 0),
-                    "source_url": asset["url"],
-                    "source_type": kind,
-                    "local_path": asset["local_path"],
-                    "title": referring_title,
-                    "chunk_index": 0,
-                    "text": description,
-                }
+            chunks.extend(
+                make_chunks(
+                    source_url=asset["url"],
+                    source_type=kind,
+                    local_path=asset["local_path"],
+                    title=referring_title,
+                    text=description,
+                    fallback_date=fallback,
+                )
             )
 
     chunks.extend(build_upload_chunks())
