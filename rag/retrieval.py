@@ -154,7 +154,8 @@ def recency_bonus(chunk_date: str | None, today: date | None = None) -> float:
     return config.RECENCY_WEIGHT * max(0.0, 1 - age_years / config.RECENCY_HORIZON_YEARS)
 
 
-_NAME = r"(?:Dr|Prof|Mr|Ms|Mrs|Shri|Smt)\.?\s+[A-Z][\w.]*(?:\s+[A-Z][\w.]*){0,3}"
+# A person's name: title + up to 4 capitalised words, all on ONE line.
+_NAME = r"(?:Dr|Prof|Mr|Ms|Mrs|Shri|Smt)\.?[ \t]+[A-Z][\w.]*(?:[ \t]+[A-Z][\w.]*){0,3}"
 
 
 def _role_holder_pattern(role_words: set[str]) -> re.Pattern:
@@ -189,9 +190,16 @@ def role_holders(text: str, role_words: set[str]) -> list[tuple[str, str]]:
         name = None
         if names_before:
             last = names_before[-1]
-            # the name must not itself end with the title word we're on
-            name = last.group(0)
-        else:
+            gap = before[last.end():]
+            # A name on an earlier line that also has times/numbers is a
+            # table row ("04:00-05:00 PM Prof. X"), not a signature.
+            if "\n" in gap:
+                name_line = before[: last.end()].rsplit("\n", 1)[-1]
+                if not re.search(r"\d", name_line):
+                    name = last.group(0)
+            else:
+                name = last.group(0)
+        if not name:
             after = _NAME_RE.search(text, m.end(), m.end() + 45)
             name = after.group(0) if after else None
         if not name:
@@ -215,6 +223,7 @@ def role_holders(text: str, role_words: set[str]) -> list[tuple[str, str]]:
         other = _NAME_RE.search(rest)
         if other:
             rest = rest[: other.start()]
+        rest = re.split(r"\s\d{1,2}[:.]\d{2}", rest)[0]  # drop "11:00-12:00" etc.
         title = re.sub(r"\s+", " ", " ".join(prefix + [m.group(0) + rest])).strip(" ,;:()-")
         pairs.append((name.strip(" ,;:()"), title))
     return pairs
