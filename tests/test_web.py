@@ -127,3 +127,11 @@ def test_answer_sources_carry_open_links(client, monkeypatch, tmp_path):
     assert first["saved_copy"] == "/files/raw/pages/syllabus.html"
     assert first["date"] == "Jul 2026"
     assert second["link"] is None and second["saved_copy"] is None  # file missing -> no broken link
+
+
+def test_drive_pdf_sources_get_their_file_name_not_view():
+    chunk = {"source_url": "https://drive.google.com/file/d/abc/view", "source_type": "pdf",
+             "title": "Time Table - MITS Gwalior - 1st sem TT.pdf"}
+    assert webapp._source_label(chunk) == "1st sem TT.pdf"
+    chunk2 = {"source_url": "https://drive.google.com/file/d/abc/view", "source_type": "pdf", "title": ""}
+    assert webapp._source_label(chunk2) == "Google Drive file"
