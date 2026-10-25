@@ -3,58 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Help Desk Admin</title>
+<title>Admin · IT Help Desk</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-<div class="topbar">
+<body class="admin-page">
+<header class="topbar">
   <div class="logo">IT</div>
-  <div>
+  <div class="titles">
     <h1>Admin Dashboard</h1>
     <div class="sub">Manage documents and see what students are asking</div>
   </div>
-  <div class="right"><a href="/">Back to chat</a></div>
-</div>
-<div class="admin">
-  <div class="grid">
-    <div class="card stat"><div class="num" id="nDocs">-</div><div class="lbl">Sources indexed</div></div>
-    <div class="card stat"><div class="num" id="nQs">-</div><div class="lbl">Questions asked</div></div>
-    <div class="card stat"><div class="num" id="avgMs">-</div><div class="lbl">Avg. response time</div></div>
-  </div>
+  <div class="right"><a class="ghost" href="/">&larr; Back to chat</a></div>
+</header>
 
-  <div class="two">
-    <div class="card">
-      <h3>Indexed documents</h3>
-      <input class="filter" id="filter" placeholder="Filter by name or type...">
+<div class="admin">
+  <section class="stats">
+    <div class="card stat"><div class="stat-num" id="nDocs">–</div><div class="stat-lbl">Documents indexed</div></div>
+    <div class="card stat"><div class="stat-num" id="nQs">–</div><div class="stat-lbl">Questions asked</div></div>
+    <div class="card stat"><div class="stat-num" id="avgMs">–</div><div class="stat-lbl">Avg. response time</div></div>
+    <div class="card stat"><div class="stat-num small" id="aiName">–</div><div class="stat-lbl">AI answering now</div></div>
+  </section>
+
+  <section class="cols">
+    <div class="card docs-card">
+      <div class="card-head">
+        <h3>Indexed documents</h3>
+        <span class="muted" id="docCount"></span>
+      </div>
+      <input class="filter" id="filter" placeholder="Search by name or type…" aria-label="Filter documents">
       <div class="tablebox">
-        <table>
-          <thead><tr><th>Name</th><th>Type</th><th>Chunks</th><th></th></tr></thead>
+        <table class="docs">
+          <colgroup><col><col class="c-type"><col class="c-date"><col class="c-num"><col class="c-act"></colgroup>
+          <thead><tr><th>Name</th><th>Type</th><th>Date</th><th class="r">Chunks</th><th></th></tr></thead>
           <tbody id="docs"></tbody>
         </table>
       </div>
     </div>
 
-    <div>
-      <div class="card" style="margin-bottom:12px">
+    <div class="side">
+      <div class="card">
         <h3>Upload a document</h3>
-        <div class="drop" id="drop">Drag a PDF / DOCX / TXT here<br>or click to choose</div>
+        <p class="muted">Add notices, schedules or rules that aren't on the website. The chatbot can answer from them about a minute later.</p>
+        <div class="drop" id="drop" tabindex="0" role="button">Drag a PDF / DOCX / TXT here<br><span class="muted">or click to choose</span></div>
         <input type="file" id="file" accept=".pdf,.docx,.txt" hidden>
         <div class="field">
-          <input type="password" id="pw" placeholder="Admin password">
-          <button class="btn" id="upBtn">Upload</button>
+          <input type="password" id="pw" placeholder="Admin password" aria-label="Admin password">
+          <button class="btn" id="upBtn" type="button">Upload</button>
         </div>
         <div class="msgline" id="upMsg"></div>
       </div>
-      <div class="card" style="margin-bottom:12px">
-        <h3>Most referenced sources</h3>
-        <ul class="plain" id="topSrc"></ul>
+      <div class="card">
+        <h3>Most cited sources</h3>
+        <ol class="rank" id="topSrc"></ol>
       </div>
       <div class="card">
         <h3>Recent questions</h3>
         <ul class="plain" id="recent"></ul>
       </div>
     </div>
-  </div>
+  </section>
 </div>
 <script src="/static/admin.js"></script>
 </body>
