@@ -59,11 +59,19 @@ function renderDocs() {
   });
 }
 
-async function load() {
-  const [docs, stats] = await Promise.all([
-    fetch("/api/documents").then(r => r.json()),
-    fetch("/api/stats").then(r => r.json()),
-  ]);
+async function load(attempt = 1) {
+  let docs, stats;
+  try {
+    [docs, stats] = await Promise.all([
+      fetch("/api/documents").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      fetch("/api/stats").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+    ]);
+  } catch (err) {
+    // The server may still be starting up (loading the index): retry a few times.
+    $("docCount").textContent = attempt < 5 ? "Loading…" : "Could not load data. Is the server running?";
+    if (attempt < 5) setTimeout(() => load(attempt + 1), 2000);
+    return;
+  }
   allDocs = docs.documents;
   $("nDocs").textContent = allDocs.length;
   $("nQs").textContent = stats.total_questions;
@@ -104,7 +112,8 @@ async function waitForRebuild() {
     if (!s.rebuilding) {
       if (s.last_rebuild_error) setMsg("Re-index failed: " + s.last_rebuild_error, "err");
       else setMsg("Done. The chatbot can now answer from the updated documents.", "ok");
-      load();
+      $("docCount").textContent = "Loading…";
+load();
       return;
     }
   }
@@ -148,4 +157,5 @@ drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pickFile(e.dataTransfer.files[0]); };
 $("upBtn").onclick = upload;
 $("filter").oninput = renderDocs;
+$("docCount").textContent = "Loading…";
 load();

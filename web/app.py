@@ -127,17 +127,19 @@ def _check_admin():
 
 @app.get("/")
 def chat_page():
-    return send_from_directory(STATIC_DIR, "index.html")
+    return send_from_directory(STATIC_DIR, "index.html", max_age=0)
 
 
 @app.get("/admin")
 def admin_page():
-    return send_from_directory(STATIC_DIR, "admin.html")
+    return send_from_directory(STATIC_DIR, "admin.html", max_age=0)
 
 
 @app.get("/static/<path:name>")
 def static_files(name):
-    return send_from_directory(STATIC_DIR, name)
+    # max_age=0: browsers re-check the file each time, so an updated page
+    # never runs with an old cached script.
+    return send_from_directory(STATIC_DIR, name, max_age=0)
 
 
 # Only these folders inside data/ may be served -- never the index, the
