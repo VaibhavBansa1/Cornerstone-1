@@ -103,8 +103,10 @@ EMBEDDING_BATCH_SIZE = _env_int("EMBEDDING_BATCH_SIZE", 32)
 TOP_K = 6                      # pieces of text handed to the LLM
 CANDIDATES_PER_RETRIEVER = 30  # how many each search method proposes
 # Re-scores the candidates with a model that reads question + text together.
-# Set RERANKER_MODEL=none to switch it off (faster on a slow laptop).
-RERANKER_MODEL = _env("RERANKER_MODEL", "BAAI/bge-reranker-base")
+# The default is small (~90 MB) and fast on a laptop CPU. More accurate but
+# ~1 GB and slower on CPU: RERANKER_MODEL=BAAI/bge-reranker-base
+# Switch it off entirely with RERANKER_MODEL=none.
+RERANKER_MODEL = _env("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 RERANK_CANDIDATES = _env_int("RERANK_CANDIDATES", 30)
 # How strongly newer text is preferred when relevance is similar (0 = off).
 RECENCY_WEIGHT = _env_float("RECENCY_WEIGHT", 0.15)
