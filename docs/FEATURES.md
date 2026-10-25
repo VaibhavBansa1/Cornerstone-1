@@ -30,11 +30,32 @@ Each box is a separate part. You can change one (a new AI model, a new embedding
 **What:** pieces of ~900 characters, cut at paragraph or sentence ends (never mid-word), with a little overlap so a fact on the edge isn't lost.
 **Where:** `chunk_text()` in `ingestion/extract.py`.
 
+## 3b. Scanned PDFs (OCR)
+**Why:** 1,737 of 4,896 PDF pages were scans (images), e.g. 14 of 19 pages of the 2026 V SEM syllabus, so the bot couldn't read them.
+**What:** pages with no text are turned into images and read with OCR: EasyOCR on the NVIDIA GPU (~2 s/page), RapidOCR on a laptop CPU (~10 s/page). Unsure words (Hindi letterheads, stamps) are dropped. Photo-only PDFs are marked "no text" and not retried.
+**How it stays fast:** results are saved per file *content*, so a rebuild, or a copied `data/` folder on the laptop, never redoes OCR.
+**Where:** `ingestion/ocr.py`, `pdf_extract()` in `ingestion/extract.py`. Install: `uv sync --extra ocr` (add `--extra cuda` on the GPU PC).
+
+## 3c. Naming "CLICK HERE" files
+**Why:** the syllabus page links every file as "CLICK HERE" in a table, so a file name like `5th 11_merged.pdf` says nothing about which batch it is for.
+**What:** the file is named from its table row + column: **"V SEM · 2024-28 BATCH"**. Its date comes from that too (V SEM of the 2024 batch starts July 2026), before the PDF's own date, and a bare year in the text (often a book's year) is used only as a last resort.
+**Where:** `ingestion/link_labels.py`, `date_from_batch_label()` in `ingestion/dates.py`.
+
+## 3d. Course lists (any code format)
+**Why:** "what subjects are in 5th sem?" needs the whole list, but search only returns a few pieces of a 19-page syllabus.
+**What:** every syllabus/timetable gets one extra piece listing all courses with codes. It finds them by layout (course name, then its code), not by code format, because codes changed when MITS became a Deemed University (old `3160512`, new `16243101`) and may change again. The AI is told codes are batch-specific and must be quoted from that batch's document.
+**Where:** `ingestion/course_list.py`.
+
 ## 4. Embeddings (meaning search) — GPU or CPU
 **Why:** finds text with the same meaning even when the words differ ("who leads the department" ≈ "Professor & Head").
 **What:** `multilingual-e5-small` turns each chunk into numbers; it understands English, Hindi and Hinglish.
 **How:** uses the NVIDIA GPU if there is one, otherwise the CPU, automatically. The index remembers which model built it and refuses to run with a different one (instead of giving wrong answers).
 **Where:** `rag/embeddings.py`, `rag/embed_index.py`. Set with `EMBEDDING_MODEL`, `EMBEDDING_DEVICE`.
+
+## 4b. Understanding the question (before searching)
+**Why:** documents are filed by batch, but students ask by semester or year ("5th sem syllabus 2026", "3rd year ka time table", "2025 students").
+**What:** a small rule-based step works out semester, batch, session and topic, e.g. *"fifth semester syllabus 2026" → 5th sem · 2024-28 batch · July-Dec 2026 session · syllabus*. It understands Roman numerals, "fifth", Hinglish ("panchve sem"), "3rd year", "2025 batch", and tells "2026" the session year from "2025" the admission year. Search then boosts documents filed under that batch, pushes other batches down and always includes a matching one; the AI is told the same; the chat shows it as **"Understood as …"**.
+**Where:** `rag/query_understanding.py` (one function, `understand()`, to replace if you ever want an AI to do this step).
 
 ## 5. Search — finding the right chunks
 **Why:** meaning search alone misses exact names and short words like "HOD".
@@ -98,7 +119,6 @@ LlamaIndex is a toolbox that contains these same parts (chunking, hybrid search,
 
 ## Still to solve
 0. **The local Ollama model (12B) is the weakest link.** With the right sources and timeline in front of it, it still sometimes calls a former HOD current. Use a larger model for the demo (`LLM_PROVIDERS=groq,openrouter,ollama` with a key), or a stronger local model.
-1. **Scanned PDFs**: 93 of 263 PDFs are images with no text, so the bot can't read them. Needs OCR (e.g. Tesseract) during ingestion.
 2. **Big Google Drive files** (>25 MB) are skipped; 1 right now.
 3. **Re-crawl on a schedule** so new notices appear without anyone running a command.
 4. **Follow-up questions**: each question is answered alone ("and who was before him?" won't work yet).
