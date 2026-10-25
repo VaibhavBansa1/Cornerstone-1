@@ -109,7 +109,7 @@ class OllamaProvider(LLMProvider):
         return wanted
 
     def describe(self) -> str:
-        return f"{self.name}:{self._resolved_model or self.model}"
+        return f"{self.name}:{self._pick_model()}"  # the model actually used
 
     def generate(self, system: str, user: str) -> str:
         payload = {

@@ -45,13 +45,23 @@ _rebuild_state = {"running": False, "last_error": None, "finished_at": None}
 
 
 def _source_label(chunk: dict) -> str:
-    if chunk.get("source_type") == "upload":
-        return chunk.get("title") or chunk["source_url"].removeprefix("upload://")
+    """Short, human name for a source card: the file name for documents,
+    the page title for web pages."""
     title = (chunk.get("title") or "").strip()
-    name = chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
+    if chunk.get("source_type") == "upload":
+        return title or chunk["source_url"].removeprefix("upload://")
     if chunk.get("source_type") in ("pdf", "image", "audio", "video", "document"):
+        # PDFs are titled "<page title> - <file name>"; Drive links end in
+        # "/view", so the URL is no good as a name.
+        if " - " in title:
+            name = title.rsplit(" - ", 1)[-1].strip()
+            if name and not name.lower().startswith("uc__"):
+                return name
+        name = chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
+        if name.lower() in ("view", "edit", "preview") or name.startswith("uc?"):
+            return title or "Google Drive file"
         return name
-    return title or name
+    return title.replace(" - MITS Gwalior", "") or chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
 
 
 def _saved_copy_link(chunk: dict) -> str | None:
