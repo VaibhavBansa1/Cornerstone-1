@@ -33,19 +33,40 @@ def test_recency_bonus_fades_with_age(monkeypatch):
     assert recency_bonus("2027-01-01", TODAY) == 0.2  # next session: full bonus
 
 
-def test_newest_head_ranks_first_when_relevance_is_similar(monkeypatch):
-    monkeypatch.setattr(config, "RECENCY_WEIGHT", 0.3)
+HEADS = [
+    _chunk("Dr. Old Person, Professor & Head, Department of IT", "2019-01-01"),
+    _chunk("Dr. Middle Person, HoD, Dept. of IT. Session: Jan-June 2026", "2026-01-05"),
+    _chunk("Dr. New Person, Dean, School of IT. Session: July-Dec 2026", "2026-07-27"),
+    _chunk("Hostel fees are payable in July", "2026-07-01"),
+]
+
+
+def test_all_role_holders_are_retrieved_and_unrelated_text_is_not():
+    """Retrieval must bring every HOD/Head/Dean mention -- synonyms included
+    -- so the LLM can see the whole timeline."""
+    results = HybridRetriever(HEADS).search("who is the HOD of IT", top_k=3, today=TODAY)
+    names = {r["text"].split(",")[0] for r in results}
+    assert names == {"Dr. Old Person", "Dr. Middle Person", "Dr. New Person"}
+
+
+def test_prompt_lists_newest_source_first_with_dates():
+    from rag.pipeline import build_context, order_for_prompt
+
+    results = HybridRetriever(HEADS).search("who is the HOD of IT", top_k=3, today=TODAY)
+    context = build_context(order_for_prompt(results))
+    assert context.index("Dr. New Person") < context.index("Dr. Middle Person") < context.index("Dr. Old Person")
+    assert "dated: Jul 2026" in context and "dated: Jan 2019" in context
+
+
+def test_recency_breaks_ties_between_equally_relevant_chunks(monkeypatch):
+    monkeypatch.setattr(config, "RECENCY_WEIGHT", 0.15)
     chunks = [
-        _chunk("Dr. Old Person, Professor & Head, Department of IT", "2019-01-01"),
-        _chunk("Dr. Middle Person, HoD, Dept. of IT. Session: Jan-June 2026", "2026-01-05"),
-        _chunk("Dr. New Person, Dean, School of IT. Session: July-Dec 2026", "2026-07-27"),
-        _chunk("Hostel fees are payable in July", "2026-07-01"),
+        _chunk("Time table for semester five, room A", "2024-07-01"),
+        _chunk("Time table for semester five, room B", "2026-07-01"),
     ]
-    results = HybridRetriever(chunks).search("who is the HOD of IT", top_k=3, today=TODAY)
-    names = [r["text"].split(",")[0] for r in results]
-    assert names[0] == "Dr. New Person"
-    assert "Dr. Old Person" in names  # still available as history
-    assert all("Hostel" not in r["text"] for r in results)
+    results = HybridRetriever(chunks).search("semester five time table", top_k=2, today=TODAY)
+    assert results[0]["relevance"] == results[1]["relevance"]
+    assert results[0]["date"] == "2026-07-01"
 
 
 def test_duplicate_chunks_take_one_slot():
