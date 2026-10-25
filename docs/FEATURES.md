@@ -66,7 +66,12 @@ For role questions, code first builds a **timeline** of every named person + tit
 **What:** the text of each PDF is saved after the first read; only new or changed PDFs are read again. Rebuild now takes under a minute.
 **Where:** `pdf_to_text()` in `ingestion/extract.py` (cache in `data/processed/pdf_text_cache/`).
 
-## 9. Nothing optional can crash it
+## 9. Chat page with clickable sources
+**Why:** students (and examiners) should see *where* every answer comes from.
+**What:** a chatbot page. Numbers like [1] in an answer are clickable; source cards sit under each answer; a Sources panel (beside the chat on a laptop, sliding up on a phone) shows each source's name, type, date and the exact passage used, with **Open original** (college site / Google Drive) and **Saved copy** (our downloaded file, which works even if the site is down and is the only link for admin uploads).
+**Where:** `web/static/` (page), `/files/...` in `web/app.py` (saved copies; only `data/raw` and `data/uploads` can be served). Check every link: `uv run scripts/check_links.py`. Result on 26 Oct 2026: 377/377 saved copies and 377/377 original links open.
+
+## 10. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. Crawl stopped → old data kept. Each of these has a test in `tests/`.
 
 ---
