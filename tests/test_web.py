@@ -44,7 +44,7 @@ def test_query_returns_generated_answer_with_cited_sources(client, monkeypatch):
 
     stats = client.get("/api/stats").get_json()
     assert stats["total_questions"] == 1
-    assert stats["recent_questions"][0]["question"] == "When is the class?"
+    assert "recent_questions" not in stats
     assert stats["top_sources"][0]["name"] == "tt.pdf"
 
 
@@ -156,3 +156,14 @@ def test_site_pdf_uses_real_file_name_not_internal_slug():
              "source_type": "pdf",
              "title": "Board of Studies (BoS) - MITS Gwalior - images__BoS__8.%20BoS%20MEETING%202021.pdf__c427dbbf.pdf"}
     assert webapp._source_label(chunk) == "8. BoS MEETING 2021.pdf"
+
+
+def test_question_text_is_never_stored(client, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setattr(pipeline, "answer", _fake_answer("groq", "See [1]."))
+    client.post("/api/query", json={"question": "a very embarrassing question"})
+    with sqlite3.connect(config.CHAT_LOG_DB_PATH) as conn:
+        dump = "\n".join(conn.iterdump())
+    assert "embarrassing" not in dump
+    assert "See [1]" not in dump
