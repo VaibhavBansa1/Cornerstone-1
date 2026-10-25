@@ -61,8 +61,8 @@ def test_prompt_lists_newest_source_first_with_dates():
 def test_recency_breaks_ties_between_equally_relevant_chunks(monkeypatch):
     monkeypatch.setattr(config, "RECENCY_WEIGHT", 0.15)
     chunks = [
-        _chunk("Time table for semester five, room A", "2024-07-01"),
-        _chunk("Time table for semester five, room B", "2026-07-01"),
+        _chunk("Time table for semester five, room one", "2024-07-01"),
+        _chunk("Time table for semester five, room two", "2026-07-01"),
     ]
     results = HybridRetriever(chunks).search("semester five time table", top_k=2, today=TODAY)
     assert results[0]["relevance"] == results[1]["relevance"]
