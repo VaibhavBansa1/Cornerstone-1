@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 import urllib.robotparser
@@ -40,6 +41,27 @@ import config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("crawler")
+
+
+# Server answers that usually mean "try again in a moment".
+TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+
+
+def _atomic_write_text(path: Path, text: str):
+    """Write to a temp file, then swap it in. If the crawl is stopped
+    halfway, the old copy of the file stays intact instead of being left
+    half-written."""
+    tmp = path.with_name(path.name + ".part")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _atomic_save_stream(resp, path: Path):
+    tmp = path.with_name(path.name + ".part")
+    with open(tmp, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=65536):
+            f.write(chunk)
+    os.replace(tmp, path)
 
 
 def _freshness(resp) -> dict:
@@ -127,10 +149,15 @@ class Manifest:
     # files. Persisted here (not just logged) so a re-crawl gives you a
     # structured list to review instead of console output.
     failed: list = field(default_factory=list)
+    # "complete" when the crawl reached the end, "interrupted" otherwise.
+    status: str = "running"
+    finished_at: float | None = None
 
     def to_json(self) -> str:
         return json.dumps(
             {
+                "status": self.status,
+                "finished_at": self.finished_at,
                 "pages": self.pages,
                 "assets": self.assets,
                 "skipped_out_of_scope": self.skipped_out_of_scope,
@@ -162,6 +189,25 @@ class ScopedCrawler:
             except requests.RequestException:
                 self._robots = None
 
+    def _get(self, url: str, stream: bool = False):
+        """GET with one retry for temporary problems (timeouts, dropped
+        connections, 429/5xx). Returns (response, None) or (None, reason)."""
+        last_reason = ""
+        for attempt in range(1 + config.FETCH_RETRIES):
+            if attempt:
+                log.info("Retrying %s (%s)", url, last_reason)
+                time.sleep(config.RETRY_DELAY_SECONDS)
+            try:
+                resp = self.session.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=stream)
+            except requests.RequestException as exc:
+                last_reason = str(exc)
+                continue
+            if resp.status_code in TRANSIENT_STATUS:
+                last_reason = f"status {resp.status_code}"
+                continue
+            return resp, None
+        return None, f"{last_reason} (after {1 + config.FETCH_RETRIES} attempts)"
+
     def _robots_allows(self, url: str) -> bool:
         if not self._robots:
             return True
@@ -176,6 +222,38 @@ class ScopedCrawler:
         queued: set[str] = {start_norm}
         self.in_scope_urls.add(start_norm)
 
+        try:
+            self._crawl_loop(queue, queued)
+        except BaseException as exc:  # Ctrl+C, crash, closed terminal...
+            # Keep the last COMPLETE manifest.json untouched and save what
+            # this run got to a separate file, clearly marked.
+            self.manifest.status = "interrupted"
+            self.manifest.finished_at = time.time()
+            partial = config.MANIFEST_PATH.with_name("manifest.partial.json")
+            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(partial, self.manifest.to_json())
+            log.warning(
+                "Crawl interrupted (%s). The previous complete manifest was kept; "
+                "this run's partial results are in %s. Run the crawl again to finish.",
+                exc.__class__.__name__, partial,
+            )
+            raise
+
+        self.manifest.status = "complete"
+        self.manifest.finished_at = time.time()
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _atomic_write_text(config.MANIFEST_PATH, self.manifest.to_json())
+        config.MANIFEST_PATH.with_name("manifest.partial.json").unlink(missing_ok=True)
+        log.info(
+            "Crawl finished: %d pages, %d assets, %d skipped-out-of-scope, %d failed.",
+            len(self.manifest.pages),
+            len(self.manifest.assets),
+            len(self.manifest.skipped_out_of_scope),
+            len(self.manifest.failed),
+        )
+        return self.manifest
+
+    def _crawl_loop(self, queue: deque, queued: set):
         while queue:
             if len(self.visited_pages) >= config.MAX_PAGES:
                 log.warning("Reached MAX_PAGES=%s, stopping crawl.", config.MAX_PAGES)
@@ -201,11 +279,10 @@ class ScopedCrawler:
                 continue
 
             log.info("Fetching page: %s", url)
-            try:
-                resp = self.session.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS)
-            except requests.RequestException as exc:
-                log.warning("Failed to fetch %s: %s", url, exc)
-                self.manifest.failed.append({"url": url, "kind": "page", "reason": str(exc)})
+            resp, error = self._get(url)
+            if resp is None:
+                log.warning("Failed to fetch %s: %s", url, error)
+                self.manifest.failed.append({"url": url, "kind": "page", "reason": error})
                 continue
             time.sleep(config.REQUEST_DELAY_SECONDS)
 
@@ -223,7 +300,7 @@ class ScopedCrawler:
             html = resp.text
             local_name = slugify_for_filename(url) + ".html"
             local_path = config.RAW_PAGES_DIR / local_name
-            local_path.write_text(html, encoding="utf-8")
+            _atomic_write_text(local_path, html)
 
             soup = BeautifulSoup(html, "html.parser")
             title = soup.title.get_text(strip=True) if soup.title else ""
@@ -247,17 +324,6 @@ class ScopedCrawler:
 
             self._extract_and_queue_links(main_scope, url, queue, queued)
             self._extract_and_download_assets(main_scope, url)
-
-        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        config.MANIFEST_PATH.write_text(self.manifest.to_json(), encoding="utf-8")
-        log.info(
-            "Crawl finished: %d pages, %d assets, %d skipped-out-of-scope, %d failed.",
-            len(self.manifest.pages),
-            len(self.manifest.assets),
-            len(self.manifest.skipped_out_of_scope),
-            len(self.manifest.failed),
-        )
-        return self.manifest
 
     def _extract_and_queue_links(self, main_scope, page_url, queue, queued):
         dept_nav = main_scope.find("nav", attrs={"aria-label": config.DEPARTMENT_NAV_ARIA_LABEL})
@@ -316,12 +382,11 @@ class ScopedCrawler:
     def _download_google_drive_asset(self, file_id: str, referenced_from: str):
         drive_view_url = f"https://drive.google.com/file/d/{file_id}/view"
         download_url = google_drive_direct_download_url(file_id)
-        try:
-            resp = self.session.get(download_url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=True)
-        except requests.RequestException as exc:
-            log.warning("Failed to fetch Google Drive file %s: %s", file_id, exc)
+        resp, error = self._get(download_url, stream=True)
+        if resp is None:
+            log.warning("Failed to fetch Google Drive file %s: %s", file_id, error)
             self.manifest.failed.append(
-                {"url": drive_view_url, "kind": "drive", "reason": str(exc), "referenced_from": referenced_from}
+                {"url": drive_view_url, "kind": "drive", "reason": error, "referenced_from": referenced_from}
             )
             return
         time.sleep(config.REQUEST_DELAY_SECONDS)
@@ -376,9 +441,14 @@ class ScopedCrawler:
 
         local_name = slugify_for_filename(download_url) + ext
         local_path = config.RAW_ASSETS_DIR / local_name
-        with open(local_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
+        try:
+            _atomic_save_stream(resp, local_path)
+        except requests.RequestException as exc:  # connection dropped mid-download
+            self.manifest.failed.append(
+                {"url": drive_view_url, "kind": "drive", "reason": f"download cut off: {exc}",
+                 "referenced_from": referenced_from}
+            )
+            return
 
         log.info("Downloaded Google Drive asset: %s (%s) -> %s", file_id, filename, local_path.name)
         self.manifest.assets.append(
@@ -395,12 +465,11 @@ class ScopedCrawler:
         )
 
     def _download_asset(self, url: str, ext: str, referenced_from: str):
-        try:
-            resp = self.session.get(url, timeout=config.REQUEST_TIMEOUT_SECONDS, stream=True)
-        except requests.RequestException as exc:
-            log.warning("Failed to fetch asset %s: %s", url, exc)
+        resp, error = self._get(url, stream=True)
+        if resp is None:
+            log.warning("Failed to fetch asset %s: %s", url, error)
             self.manifest.failed.append(
-                {"url": url, "kind": "asset", "reason": str(exc), "referenced_from": referenced_from}
+                {"url": url, "kind": "asset", "reason": error, "referenced_from": referenced_from}
             )
             return
         time.sleep(config.REQUEST_DELAY_SECONDS)
@@ -418,9 +487,14 @@ class ScopedCrawler:
 
         local_name = slugify_for_filename(url) + ext
         local_path = config.RAW_ASSETS_DIR / local_name
-        with open(local_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
+        try:
+            _atomic_save_stream(resp, local_path)
+        except requests.RequestException as exc:  # connection dropped mid-download
+            self.manifest.failed.append(
+                {"url": url, "kind": "asset", "reason": f"download cut off: {exc}",
+                 "referenced_from": referenced_from}
+            )
+            return
 
         log.info("Downloaded asset: %s -> %s", url, local_path.name)
         self.manifest.assets.append(
