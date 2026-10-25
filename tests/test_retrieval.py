@@ -85,3 +85,32 @@ def test_broken_reranker_does_not_break_search():
     results = retriever.search("who is the HOD of IT", top_k=3, today=TODAY)
     assert len(results) == 3
     assert retriever.reranker is None
+
+
+def test_semester_numbers_match_roman_numerals():
+    from rag.retrieval import expand_query
+
+    assert {"v", "5", "fifth"} <= set(expand_query("timetable for 5th semester"))
+    assert "v" not in expand_query("what is the vision")  # no semester word: untouched
+    chunks = [
+        _chunk("Time-Table, B.Tech, IT Semester-V (Session: July-Dec 2026)", "2026-07-01"),
+        _chunk("Time-Table, B.Tech, IT Semester-III (Session: July-Dec 2026)", "2026-07-01"),
+    ]
+    results = HybridRetriever(chunks).search("B.Tech IT 5th sem timetable", top_k=1, today=TODAY)
+    assert "Semester-V " in results[0]["text"]
+
+
+def test_role_timeline_lists_named_holders_newest_first():
+    from rag.retrieval import role_timeline
+
+    results = [
+        {"text": "Editorial Board\nDr. Sanjiv Sharma, HoD IT", "date": "2024-07-01"},
+        {"text": "w.e.f. 27/07/2026\n(Prof. Vikas Sejwar)\nTime Table Coordinator\n(Dr. Punit K Johari)\nDean, School of IT",
+         "date": "2026-07-27"},
+    ]
+    rows = role_timeline("Who is the HOD?", results)
+    assert rows[0] == ("2026-07-27", "Dr. Punit K Johari Dean, School of IT", 2)
+    assert rows[1][1].startswith("Dr. Sanjiv Sharma")
+    coord = role_timeline("time table coordinator kaun hai", results)
+    assert coord[0][1] == "Prof. Vikas Sejwar Time Table Coordinator"
+    assert role_timeline("what is the vision", results) == []
