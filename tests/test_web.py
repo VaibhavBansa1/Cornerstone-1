@@ -149,3 +149,10 @@ def test_saved_web_page_shows_only_main_content(client, tmp_path, monkeypatch):
     assert res.status_code == 200
     assert "Dr. X, HoD" in html and "Saved copy of <b>Faculty</b>" in html
     assert "Huge site menu" not in html and "evil()" not in html
+
+
+def test_site_pdf_uses_real_file_name_not_internal_slug():
+    chunk = {"source_url": "https://web.mitsgwalior.in/images/BoS/8.%20BoS%20MEETING%202021.pdf",
+             "source_type": "pdf",
+             "title": "Board of Studies (BoS) - MITS Gwalior - images__BoS__8.%20BoS%20MEETING%202021.pdf__c427dbbf.pdf"}
+    assert webapp._source_label(chunk) == "8. BoS MEETING 2021.pdf"
