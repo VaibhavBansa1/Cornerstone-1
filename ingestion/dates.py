@@ -78,9 +78,13 @@ def find_dates(text: str, today: date | None = None) -> tuple[list[date], list[d
     # also count as "Dec 2026").
     def matches(pattern):
         nonlocal text
-        found = list(pattern.finditer(text))
-        for m in reversed(found):
-            text = text[: m.start()] + " " * (m.end() - m.start()) + text[m.end():]
+        found = []
+
+        def blank(m):
+            found.append(m)
+            return " " * (m.end() - m.start())
+
+        text = pattern.sub(blank, text)  # one pass, fast even on huge PDFs
         return found
 
     for m in matches(_NUMERIC):
