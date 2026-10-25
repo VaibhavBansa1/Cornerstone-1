@@ -178,10 +178,15 @@ class HybridRetriever:
         if not candidates:
             return []
 
+        relevance = None
         if self.reranker is not None:
             texts = [f"{self.chunks[i].get('title', '')}\n{self.chunks[i]['text']}" for i in candidates]
-            relevance = self.reranker.score(query, texts)
-        else:
+            try:
+                relevance = self.reranker.score(query, texts)
+            except Exception as exc:  # model missing, offline, out of memory...
+                log.warning("Reranker unavailable (%s); continuing without it.", exc)
+                self.reranker = None  # don't retry on every question
+        if relevance is None:
             # No reranker: average the methods' own scores (BM25 scaled to
             # 0..1, cosine similarity is already 0..1). Unlike rank-based
             # scores, two equally good chunks get equal relevance here, so
