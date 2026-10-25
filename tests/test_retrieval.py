@@ -122,3 +122,14 @@ def test_role_holder_pairs_the_nearest_name_not_the_first_in_a_list():
     text = "Ms. Surbhi Gupta\nMs. Nidhi Saxena\n(Dr. Punit Kumar Johari)\nDean, SoIT"
     assert role_holders(text, {"dean"}) == [("Dr. Punit Kumar Johari", "Dean, SoIT")]
     assert role_holders("HoD: Dr. Sanjiv Sharma", {"hod"}) == [("Dr. Sanjiv Sharma", "HoD")]
+
+
+def test_timetable_row_speaker_is_not_paired_with_a_signature_title():
+    from rag.retrieval import role_holders
+
+    # Real layout from an induction schedule PDF: last table row, then the
+    # signature title whose name wasn't extracted.
+    text = "IT Policies & act. 04:00–05:00 PM Prof. Surbhi Gupta\nDean, SoIT"
+    assert role_holders(text, {"dean"}) == []
+    text2 = "Chancellor/Dean/Head 11:00–12:00 Dr. Punit Kumar Johari\nBreak 12:00–13:00"
+    assert role_holders(text2, {"dean"})[0] == ("Dr. Punit Kumar Johari", "Dean/Head")
