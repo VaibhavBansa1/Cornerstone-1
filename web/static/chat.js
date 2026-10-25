@@ -84,6 +84,14 @@ function renderAnswer(bubble, data) {
   bubble.textContent = "";
   bubble.dataset.answer = idx;
 
+  if (data.understood_as) {
+    const u = el("div", "understood");
+    u.appendChild(el("span", "u-label", "Understood as"));
+    u.appendChild(document.createTextNode(" " + data.understood_as));
+    u.title = "How the question was read before searching. Add a batch (e.g. \"2024-28 batch\") or semester to change it.";
+    bubble.appendChild(u);
+  }
+
   if (data.generated) {
     const body = el("div", "answer");
     body.innerHTML = renderMarkdown(data.answer, idx, valid);
