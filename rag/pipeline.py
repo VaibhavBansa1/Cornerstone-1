@@ -92,13 +92,19 @@ def build_timeline(query: str, results: list[dict]) -> str:
     return "Timeline of people named with this role in the sources (newest first):\n" + "\n".join(lines)
 
 
-def generate_answer(query: str, results: list[dict], today: date | None = None) -> llm.Reply:
+def build_prompt(query: str, results: list[dict], today: date | None = None) -> tuple[str, str]:
+    """(system prompt, user message) exactly as the LLM will see them."""
     context = build_context(results)
     timeline = build_timeline(query, results)
     if timeline:
         context = f"{context}\n\n{timeline}"
     system = SYSTEM_PROMPT.format(today=(today or date.today()).strftime("%d %B %Y"))
-    user_message = f"Sources:\n{context}\n\nQuestion: {query}"
+    return system, f"Sources:\n{context}\n\nQuestion: {query}"
+
+
+def generate_answer(query: str, results: list[dict], today: date | None = None) -> llm.Reply:
+    system, user_message = build_prompt(query, results, today)
+    context = build_context(results)
     reply = llm.generate(system, user_message)
     if not reply.generated:
         why = "; ".join(reply.errors) or "no LLM provider is configured or reachable"
@@ -123,10 +129,18 @@ def main():
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    if len(sys.argv) < 2:
-        print('Usage: python -m rag.pipeline "your question"')
+    args = sys.argv[1:]
+    show_prompt = "--show-prompt" in args
+    args = [a for a in args if a != "--show-prompt"]
+    if not args:
+        print('Usage: python -m rag.pipeline [--show-prompt] "your question"')
         raise SystemExit(1)
-    result = answer(" ".join(sys.argv[1:]))
+    question = " ".join(args)
+    if show_prompt:  # print exactly what the LLM would receive, don't call it
+        system, user_message = build_prompt(question, order_for_prompt(retrieve(question)))
+        print("=== SYSTEM ===\n" + system + "\n\n=== USER ===\n" + user_message)
+        return
+    result = answer(question)
     print("\n=== ANSWER ===  (via", result["provider"] + ")\n")
     print(result["answer"])
     print("\n=== SOURCES ===")
