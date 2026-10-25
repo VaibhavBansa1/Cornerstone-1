@@ -118,10 +118,12 @@ def pdf_extract(path: Path) -> dict:
         cache = _pdf_cache_path(path)
         if cache.exists():
             cached = json.loads(cache.read_text(encoding="utf-8"))
-            # Re-do a cached result only if it skipped scanned pages that
-            # we can now OCR.
-            missing_ocr = cached.get("scanned_pages", 0) > cached.get("ocr_pages", 0)
-            if not (missing_ocr and ocr.available()):
+            # Re-do a cached result only if its scanned pages were never
+            # OCR'd (it was cached on a machine without OCR) and OCR is
+            # available now. Pages OCR found no words on (blank pages,
+            # photos) must NOT trigger a redo every time.
+            ocr_done = cached.get("ocr_attempted") or cached.get("ocr_pages", 0) > 0
+            if not cached.get("scanned_pages") or ocr_done or not ocr.available():
                 return cached
     except (OSError, ValueError):
         pass
@@ -149,6 +151,7 @@ def pdf_extract(path: Path) -> dict:
     result["pages"] = len(page_texts)
     result["scanned_pages"] = len(scanned)
     if scanned and ocr.available():
+        result["ocr_attempted"] = True
         log.info("OCR: %s (%d of %d pages are scanned)", path.name, len(scanned), len(page_texts))
         for i, text in ocr.ocr_pdf_pages(path, scanned).items():
             if text.strip():
