@@ -138,6 +138,19 @@ def recency_bonus(chunk_date: str | None, today: date | None = None) -> float:
     return config.RECENCY_WEIGHT * max(0.0, 1 - age_years / config.RECENCY_HORIZON_YEARS)
 
 
+_NAME = r"(?:Dr|Prof|Mr|Ms|Mrs|Shri|Smt)\.?\s+[A-Z][\w.]*(?:\s+[A-Z][\w.]*){0,3}"
+
+
+def _role_holder_pattern(role_words: set[str]) -> re.Pattern:
+    """Matches a person's name close to a role word, e.g.
+    "(Dr. Punit K Johari) Dean, School of IT" or "HoD: Dr. Sanjiv Sharma"."""
+    roles = "|".join(sorted(re.escape(r) for r in role_words))
+    return re.compile(
+        rf"{_NAME}[^\n]{{0,40}}?\b(?:{roles})\b|\b(?:{roles})\b[^\n]{{0,40}}?{_NAME}",
+        re.I,
+    )
+
+
 def _dedupe_key(text: str) -> str:
     return re.sub(r"\W+", "", text.lower())[:300]
 
@@ -186,9 +199,12 @@ class HybridRetriever:
         role_words &= config.ROLE_TERMS
         if not role_words:
             return []
+        holder = _role_holder_pattern(role_words)
         mentions = [
             i for i, _ in keyword_hits_wide
-            if self.chunks[i].get("date") and role_words & self.bm25.doc_tokens[i].keys()
+            if self.chunks[i].get("date")
+            and role_words & self.bm25.doc_tokens[i].keys()
+            and holder.search(self.chunks[i]["text"])
         ]
         mentions.sort(key=lambda i: self.chunks[i]["date"], reverse=True)
         picked, seen = [], set()

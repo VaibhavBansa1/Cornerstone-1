@@ -12,7 +12,7 @@ is 5 January 2026).
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 MONTHS = {
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
@@ -59,8 +59,10 @@ def _safe_date(year: int, month: int, day: int = 1) -> date | None:
 
 
 def _latest_allowed(today: date) -> date:
-    # Timetables are often published a little before their session starts.
-    return date(today.year + 1, 12, 31)
+    # Timetables are often published a little before their session starts,
+    # so allow ~2 months ahead. Anything later ("valid till April 2027",
+    # "for three years") is a deadline, not when the text was written.
+    return today + timedelta(days=62)
 
 
 def find_dates(text: str, today: date | None = None) -> tuple[list[date], list[date]]:
