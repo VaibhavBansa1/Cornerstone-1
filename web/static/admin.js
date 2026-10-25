@@ -2,12 +2,28 @@ const $ = id => document.getElementById(id);
 let allDocs = [];
 let chosenFile = null;
 
-function li(left, right) {
-  const item = document.createElement("li");
-  const a = document.createElement("span"); a.textContent = left;
-  const b = document.createElement("span"); b.textContent = right; b.style.color = "#667085";
-  item.append(a, b);
-  return item;
+const TYPE_LABEL = { page: "Page", pdf: "PDF", upload: "Upload", image: "Image", video: "Video", audio: "Audio", document: "Doc" };
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+
+function link(text, href, cls) {
+  if (!href) return el("span", cls, text);
+  const a = el("a", cls, text);
+  a.href = href; a.target = "_blank"; a.rel = "noopener";
+  return a;
+}
+
+function timeAgo(seconds) {
+  const diff = Date.now() / 1000 - seconds;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + " min ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + " h ago";
+  return new Date(seconds * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function renderDocs() {
@@ -15,30 +31,30 @@ function renderDocs() {
   const body = $("docs");
   body.textContent = "";
   const shown = allDocs.filter(d => (d.title + " " + d.source_type).toLowerCase().includes(f));
+  $("docCount").textContent = f ? `${shown.length} of ${allDocs.length}` : `${allDocs.length} total`;
   if (!shown.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td"); td.colSpan = 4;
+    const tr = el("tr"); const td = el("td", "muted"); td.colSpan = 5;
     td.textContent = allDocs.length ? "No match." : "Nothing indexed yet. Run python run_pipeline.py or upload a file.";
     tr.appendChild(td); body.appendChild(tr);
     return;
   }
   shown.forEach(d => {
-    const tr = document.createElement("tr");
-    const name = document.createElement("td"); name.className = "title";
-    if (d.source_url.startsWith("http")) {
-      const a = document.createElement("a"); a.href = d.source_url; a.target = "_blank"; a.textContent = d.title;
-      name.appendChild(a);
-    } else name.textContent = d.title;
-    const type = document.createElement("td");
-    const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = d.source_type; type.appendChild(tag);
-    const n = document.createElement("td"); n.textContent = d.chunks;
-    const act = document.createElement("td");
+    const tr = el("tr");
+    const name = el("td", "name");
+    name.appendChild(link(d.title, d.source_url.startsWith("http") ? d.source_url : d.saved_copy));
+    name.title = d.title;
+    const type = el("td"); type.appendChild(el("span", "tag t-" + d.source_type, TYPE_LABEL[d.source_type] || d.source_type));
+    const date = el("td", "muted", d.date && d.date !== "undated" ? d.date : "–");
+    const n = el("td", "r", d.chunks);
+    const act = el("td", "r");
     if (d.deletable) {
-      const btn = document.createElement("button"); btn.className = "btn small"; btn.textContent = "Remove";
+      const btn = el("button", "btn small", "Remove"); btn.type = "button";
       btn.onclick = () => removeDoc(d.source_url.replace("upload://", ""));
       act.appendChild(btn);
+    } else if (d.saved_copy) {
+      act.appendChild(link("Saved", d.saved_copy, "mini"));
     }
-    tr.append(name, type, n, act);
+    tr.append(name, type, date, n, act);
     body.appendChild(tr);
   });
 }
@@ -51,17 +67,31 @@ async function load() {
   allDocs = docs.documents;
   $("nDocs").textContent = allDocs.length;
   $("nQs").textContent = stats.total_questions;
-  $("avgMs").textContent = stats.total_questions ? (stats.avg_response_ms / 1000).toFixed(1) + " s" : "-";
+  $("avgMs").textContent = stats.total_questions ? (stats.avg_response_ms / 1000).toFixed(1) + " s" : "–";
+  const chain = (stats.provider || "none").split(" -> ");
+  $("aiName").textContent = chain[0] === "none" ? "None (passages only)" : chain[0].split(":")[0];
+  $("aiName").title = stats.provider || "";
   renderDocs();
 
-  $("topSrc").textContent = "";
-  if (!stats.top_sources.length) $("topSrc").appendChild(li("No questions yet", ""));
-  stats.top_sources.forEach(s => $("topSrc").appendChild(li(s.name, s.count + "x")));
+  const top = $("topSrc");
+  top.textContent = "";
+  if (!stats.top_sources.length) top.appendChild(el("li", "muted", "No questions yet"));
+  stats.top_sources.forEach(s => {
+    const item = el("li");
+    const name = link(s.name, s.link, "rank-name"); name.title = s.name;
+    item.append(name, el("span", "count", s.count + "×"));
+    top.appendChild(item);
+  });
 
-  $("recent").textContent = "";
-  if (!stats.recent_questions.length) $("recent").appendChild(li("No questions yet", ""));
-  stats.recent_questions.forEach(q =>
-    $("recent").appendChild(li(q.question, new Date(q.asked_at * 1000).toLocaleString())));
+  const recent = $("recent");
+  recent.textContent = "";
+  if (!stats.recent_questions.length) recent.appendChild(el("li", "muted", "No questions yet"));
+  stats.recent_questions.forEach(q => {
+    const item = el("li");
+    item.append(el("span", "q", q.question), el("span", "when", timeAgo(q.asked_at)));
+    item.title = new Date(q.asked_at * 1000).toLocaleString();
+    recent.appendChild(item);
+  });
 }
 
 function setMsg(text, cls) { $("upMsg").textContent = text; $("upMsg").className = "msgline " + (cls || ""); }
@@ -82,7 +112,9 @@ async function waitForRebuild() {
 
 function pickFile(f) {
   chosenFile = f;
-  $("drop").textContent = f ? f.name : "Drag a PDF / DOCX / TXT here or click to choose";
+  const drop = $("drop");
+  if (f) { drop.textContent = f.name; drop.classList.add("chosen"); }
+  else { drop.innerHTML = 'Drag a PDF / DOCX / TXT here<br><span class="muted">or click to choose</span>'; drop.classList.remove("chosen"); }
 }
 
 async function upload() {
@@ -109,6 +141,7 @@ async function removeDoc(name) {
 
 const drop = $("drop");
 drop.onclick = () => $("file").click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
 $("file").onchange = e => pickFile(e.target.files[0]);
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");

@@ -42,16 +42,29 @@ def log_question(question: str, answer: str, sources: list[dict], provider: str,
         )
 
 
-def stats(top_n: int = 5) -> dict:
+def stats(top_n: int = 5, label_for=None, link_for=None) -> dict:
+    """Usage numbers for the admin page.
+
+    Sources are counted by their link, and ``label_for(url)`` (supplied by
+    the web app from the current index) gives the display name, so entries
+    logged before a naming fix still show a proper name.
+    """
     with _connect() as conn:
         rows = conn.execute("SELECT question, sources, response_ms, asked_at FROM chat_log ORDER BY id DESC").fetchall()
     cited = Counter()
+    fallback_name: dict[str, str] = {}
     for _q, sources, _ms, _t in rows:
         for s in json.loads(sources):
-            cited[s.get("title") or s["source_url"]] += 1
+            url = s.get("source_url") or s.get("title") or "?"
+            cited[url] += 1
+            fallback_name.setdefault(url, s.get("title") or url)
+    top = []
+    for url, count in cited.most_common(top_n):
+        name = (label_for(url) if label_for else None) or fallback_name[url]
+        top.append({"name": name, "count": count, "link": link_for(url) if link_for else None})
     return {
         "total_questions": len(rows),
         "avg_response_ms": round(sum(r[2] for r in rows) / len(rows)) if rows else 0,
-        "top_sources": [{"name": name, "count": count} for name, count in cited.most_common(top_n)],
+        "top_sources": top,
         "recent_questions": [{"question": r[0], "asked_at": r[3]} for r in rows[:10]],
     }

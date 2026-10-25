@@ -271,6 +271,8 @@ def documents():
                 "source_url": c["source_url"],
                 "source_type": c.get("source_type"),
                 "chunks": 0,
+                "date": date_label(c.get("doc_date") or c.get("date")),
+                "saved_copy": _saved_copy_link(c),
                 "deletable": c.get("source_type") == "upload",
             },
         )
@@ -280,7 +282,28 @@ def documents():
 
 @app.get("/api/stats")
 def stats():
-    return jsonify(chatlog.stats())
+    by_url: dict[str, dict] = {}
+    if pipeline.index_exists():
+        try:
+            _index, chunks = pipeline._load_index()
+            for c in chunks:
+                by_url.setdefault(c["source_url"], c)
+        except Exception:
+            pass
+
+    def label_for(url):
+        chunk = by_url.get(url)
+        return _source_label(chunk) if chunk else unquote(url.rstrip("/").rsplit("/", 1)[-1]) or None
+
+    def link_for(url):
+        chunk = by_url.get(url)
+        if url.startswith("upload://"):
+            return _saved_copy_link(chunk) if chunk else None
+        return url if url.startswith("http") else None
+
+    data = chatlog.stats(label_for=label_for, link_for=link_for)
+    data["provider"] = llm.describe_chain()
+    return jsonify(data)
 
 
 def _rebuild_index():
