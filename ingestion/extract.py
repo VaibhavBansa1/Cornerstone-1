@@ -38,6 +38,8 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 
 import config
+from ingestion import ocr
+from ingestion.link_labels import labels_from_page
 from ingestion.dates import latest_date
 
 log = logging.getLogger("ingest")
@@ -81,43 +83,90 @@ def html_to_text(html: str) -> str:
     return normalize_text(text)
 
 
-PDF_CACHE_VERSION = "1"  # bump to force re-extraction of every PDF
+PDF_CACHE_VERSION = "2"  # bump to force re-extraction of every PDF
+MIN_PAGE_TEXT_CHARS = 30  # a page with less text than this is treated as scanned
 
 
 def _pdf_cache_path(path: Path) -> Path:
-    stat = path.stat()
-    key = f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}|{PDF_CACHE_VERSION}"
-    return config.PROCESSED_DIR / "pdf_text_cache" / (hashlib.sha1(key.encode()).hexdigest() + ".txt")
+    """Cache key = the file's content, not its location, so a copied data/
+    folder (e.g. to the demo laptop) reuses the cache instead of redoing OCR."""
+    digest = hashlib.sha1(path.read_bytes()).hexdigest()
+    return config.PROCESSED_DIR / "pdf_text_cache" / f"{digest}-v{PDF_CACHE_VERSION}.json"
 
 
-def pdf_to_text(path: Path) -> str:
-    """PDF -> text. Reading PDFs is slow (scanned ones take ~20 s and give
-    no text), so the result is cached; a rebuild only re-reads PDFs that
-    are new or changed."""
+def _pdf_date(reader) -> str | None:
+    """When the PDF file itself says it was made/last changed."""
+    try:
+        meta = reader.metadata
+        for d in (meta.modification_date, meta.creation_date) if meta else ():
+            if d and 1990 <= d.year <= datetime.now().year + 1:
+                return d.date().isoformat()
+    except Exception:
+        pass
+    return None
+
+
+def pdf_extract(path: Path) -> dict:
+    """PDF -> {"text", "pdf_date", "pages", "scanned_pages", "ocr_pages"}.
+
+    Text pages are read directly; pages with no text (scans) are OCR'd when
+    an OCR engine is installed. Results are cached by file content, so a
+    rebuild only re-reads new or changed PDFs.
+    """
+    cache = None
     try:
         cache = _pdf_cache_path(path)
         if cache.exists():
-            return cache.read_text(encoding="utf-8")
-    except OSError:
-        cache = None
+            cached = json.loads(cache.read_text(encoding="utf-8"))
+            # Re-do a cached result only if it skipped scanned pages that
+            # we can now OCR.
+            missing_ocr = cached.get("scanned_pages", 0) > cached.get("ocr_pages", 0)
+            if not (missing_ocr and ocr.available()):
+                return cached
+    except (OSError, ValueError):
+        pass
+
+    result = {"text": "", "pdf_date": None, "pages": 0, "scanned_pages": 0, "ocr_pages": 0}
     try:
         from pypdf import PdfReader
     except ImportError:
         log.warning("pypdf not installed; skipping PDF text extraction for %s", path)
-        return ""
+        return result
     try:
         reader = PdfReader(str(path))
-        text = normalize_text("\n".join(page.extract_text() or "" for page in reader.pages))
+        page_texts = []
+        for page in reader.pages:
+            try:
+                page_texts.append(page.extract_text() or "")
+            except Exception:
+                page_texts.append("")
+        result["pdf_date"] = _pdf_date(reader)
     except Exception as exc:  # malformed PDFs happen in the wild
-        log.warning("Failed to extract text from %s: %s", path, exc)
-        text = ""
+        log.warning("Failed to read %s: %s", path, exc)
+        page_texts = []
+
+    scanned = [i for i, t in enumerate(page_texts) if len(t.strip()) < MIN_PAGE_TEXT_CHARS]
+    result["pages"] = len(page_texts)
+    result["scanned_pages"] = len(scanned)
+    if scanned and ocr.available():
+        log.info("OCR: %s (%d of %d pages are scanned)", path.name, len(scanned), len(page_texts))
+        for i, text in ocr.ocr_pdf_pages(path, scanned).items():
+            if text.strip():
+                page_texts[i] = text
+                result["ocr_pages"] += 1
+    result["text"] = normalize_text("\n".join(page_texts))
+
     if cache is not None:
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(text, encoding="utf-8")
+            cache.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass
-    return text
+    return result
+
+
+def pdf_to_text(path: Path) -> str:
+    return pdf_extract(path)["text"]
 
 
 def docx_to_text(path: Path) -> str:
@@ -254,6 +303,7 @@ def make_chunks(
     title: str,
     text: str,
     fallback_date: str | None = None,
+    link_label: str = "",
 ) -> list[dict]:
     """Chunk one document and stamp every chunk with a date.
 
@@ -271,6 +321,7 @@ def make_chunks(
                 "source_type": source_type,
                 "local_path": local_path,
                 "title": title,
+                "link_label": link_label,
                 "chunk_index": i,
                 "date": latest_date(piece) or doc_date,
                 "doc_date": doc_date,
@@ -311,6 +362,25 @@ MEDIA_KIND_BY_EXT = {
 }
 
 
+def _link_labels(manifest: dict) -> dict[str, str]:
+    """{asset url: label} from how each file is linked on the saved pages."""
+    from scraper.crawler import normalize_url
+
+    labels: dict[str, str] = {}
+    for page in manifest["pages"]:
+        html_path = config.DATA_DIR / page["local_path"]
+        if not html_path.exists():
+            continue
+        try:
+            found = labels_from_page(html_path.read_text(encoding="utf-8"), page["url"], normalize_url)
+        except Exception as exc:
+            log.warning("Could not read link labels from %s: %s", page["url"], exc)
+            continue
+        for url, label in found.items():
+            labels.setdefault(url, label)
+    return labels
+
+
 def build_chunks() -> list[dict]:
     chunks: list[dict] = []
     if not config.MANIFEST_PATH.exists():
@@ -319,6 +389,7 @@ def build_chunks() -> list[dict]:
     manifest = json.loads(config.MANIFEST_PATH.read_text(encoding="utf-8"))
 
     page_title_by_url = {p["url"]: p.get("title", "") for p in manifest["pages"]}
+    link_labels = _link_labels(manifest)
 
     for page in manifest["pages"]:
         html_path = config.DATA_DIR / page["local_path"]
@@ -343,12 +414,15 @@ def build_chunks() -> list[dict]:
         display_name = asset.get("original_filename") or local_path.name
         fallback = _last_modified_date(asset)
 
+        label = link_labels.get(asset["url"], "")
         if kind == "document" and ext == ".pdf" and local_path.exists():
-            text = pdf_to_text(local_path)
+            info = pdf_extract(local_path)
+            text = info["text"]
             if not text.strip():
                 text = f"PDF document '{display_name}' referenced from page '{referring_title}'."
-            # The file name often carries the date ("TT_July_2026.pdf").
-            doc_title = f"{referring_title} - {display_name}" if referring_title else display_name
+            # Title = page + where it's linked + file name, e.g.
+            # "Syllabus - MITS Gwalior - V SEM · 2024-28 BATCH - 5th 11_merged.pdf"
+            doc_title = " - ".join(p for p in (referring_title, label, display_name) if p)
             chunks.extend(
                 make_chunks(
                     source_url=asset["url"],
@@ -356,7 +430,9 @@ def build_chunks() -> list[dict]:
                     local_path=asset["local_path"],
                     title=doc_title,
                     text=text,
-                    fallback_date=fallback,
+                    # no date in the text -> when the PDF was made -> server date
+                    fallback_date=info.get("pdf_date") or fallback,
+                    link_label=label,
                 )
             )
         else:
@@ -364,6 +440,8 @@ def build_chunks() -> list[dict]:
                 f"{kind.capitalize()} file '{display_name}' "
                 f"referenced from page '{referring_title}' ({asset['referenced_from']})."
             )
+            if label:
+                description = f"{description} Linked as: {label}."
             chunks.extend(
                 make_chunks(
                     source_url=asset["url"],
@@ -372,6 +450,7 @@ def build_chunks() -> list[dict]:
                     title=referring_title,
                     text=description,
                     fallback_date=fallback,
+                    link_label=label,
                 )
             )
 

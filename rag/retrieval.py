@@ -64,6 +64,25 @@ for _n in range(1, 9):
         NUMBER_FORMS[_f] = [x for x in _forms if x != _f]
 
 
+def session_start_year(today: date | None = None) -> int:
+    """Academic sessions run July-June: Oct 2026 -> 2026, Mar 2027 -> 2026."""
+    today = today or date.today()
+    return today.year if today.month >= 7 else today.year - 1
+
+
+def batch_for_semester(semester: int, today: date | None = None) -> int:
+    """Admission year of the batch that is in (or nearest to) ``semester``
+    in the current session: in 2026-27, 5th sem -> 2024 (the 2024-28 batch)."""
+    return session_start_year(today) - (semester - 1) // 2
+
+
+def semester_for_batch(admitted: int, today: date | None = None) -> int:
+    """Which semester a batch is in right now: 2024 batch in Oct 2026 -> 5."""
+    today = today or date.today()
+    base = 2 * (session_start_year(today) - admitted)
+    return base + (1 if today.month >= 7 else 2)
+
+
 def expand_query(query: str) -> list[str]:
     """Question tokens plus synonym tokens (deduplicated, order kept)."""
     tokens = tokenize(query)
@@ -76,6 +95,17 @@ def expand_query(query: str) -> list[str]:
         # so "I" or "V" in ordinary questions aren't treated as numbers
         if has_semester_word and tok in NUMBER_FORMS:
             expanded.extend(NUMBER_FORMS[tok])
+            # "5th sem" also means "the batch now in 5th sem" (2024-28):
+            # helps pick this year's syllabus over last year's.
+            n = int(next(f for f in [tok, *NUMBER_FORMS[tok]] if f.isdigit()))
+            years = [int(t) for t in tokens if t.isdigit() and len(t) == 4]
+            if not years:
+                expanded.append(str(batch_for_semester(n)))
+            for y in years:
+                # "2026 5th sem": a 2026 batch can't be in 5th sem yet, so
+                # 2026 is the session year -> the 2024-28 batch.
+                if y + (n - 1) // 2 > session_start_year() + 1:
+                    expanded.append(str(y - (n - 1) // 2))
     seen, result = set(), []
     for tok in expanded:
         if tok not in seen:

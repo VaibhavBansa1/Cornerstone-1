@@ -133,3 +133,21 @@ def test_timetable_row_speaker_is_not_paired_with_a_signature_title():
     assert role_holders(text, {"dean"}) == []
     text2 = "Chancellor/Dean/Head 11:00–12:00 Dr. Punit Kumar Johari\nBreak 12:00–13:00"
     assert role_holders(text2, {"dean"})[0] == ("Dr. Punit Kumar Johari", "Dean/Head")
+
+
+def test_batch_and_semester_mapping():
+    from rag.retrieval import batch_for_semester, semester_for_batch
+
+    oct26, mar27 = date(2026, 10, 26), date(2027, 3, 1)
+    assert batch_for_semester(5, oct26) == 2024
+    assert batch_for_semester(3, oct26) == 2025
+    assert semester_for_batch(2024, oct26) == 5
+    assert semester_for_batch(2024, mar27) == 6
+    assert semester_for_batch(2026, oct26) == 1
+
+
+def test_batch_guide_in_prompt():
+    from rag.pipeline import batch_guide
+
+    g = batch_guide(date(2026, 10, 26))
+    assert "July-Dec 2026" in g and "2024-28 batch = semester 5" in g and "2025-29 batch = semester 3" in g
