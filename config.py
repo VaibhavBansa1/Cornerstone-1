@@ -55,6 +55,10 @@ RESPECT_ROBOTS_TXT = True
 MAX_PAGES = 500
 REQUEST_DELAY_SECONDS = 0.5
 REQUEST_TIMEOUT_SECONDS = 20
+# A timeout / dropped connection / 429 / 5xx is retried this many times
+# before the URL is recorded as failed.
+FETCH_RETRIES = 1
+RETRY_DELAY_SECONDS = 3
 USER_AGENT = "MITS-IT-Dept-RAG-Bot/1.0 (+educational research crawler)"
 
 DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
