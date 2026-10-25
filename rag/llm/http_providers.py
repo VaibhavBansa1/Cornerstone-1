@@ -27,9 +27,11 @@ def clean_reply(text: str) -> str:
     return _THINK_RE.sub("", text or "").strip()
 
 
-def _post(url: str, *, headers: dict, payload: dict, provider: str) -> dict:
+def _post(url: str, *, headers: dict, payload: dict, provider: str, timeout: int | None = None) -> dict:
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=config.LLM_TIMEOUT_SECONDS)
+        resp = requests.post(url, headers=headers, json=payload, timeout=timeout or config.LLM_TIMEOUT_SECONDS)
+    except requests.Timeout as exc:
+        raise ProviderError(f"{provider}: no reply within {timeout or config.LLM_TIMEOUT_SECONDS}s") from exc
     except requests.RequestException as exc:
         raise ProviderError(f"{provider}: could not connect ({exc.__class__.__name__})") from exc
     if resp.status_code == 429:
@@ -120,9 +122,11 @@ class OllamaProvider(LLMProvider):
                     {"role": "user", "content": user},
                 ],
                 "stream": False,
+                "keep_alive": self.settings.get("keep_alive", "30m"),
                 "options": {"temperature": config.LLM_TEMPERATURE},
             },
             provider=self.name,
+            timeout=self.settings.get("timeout"),
         )
         text = clean_reply((data.get("message") or {}).get("content", ""))
         if not text:

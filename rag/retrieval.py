@@ -16,7 +16,11 @@ How it works, step by step:
    relevant the current one wins. Old chunks are still returned, so the
    answer can say "previously ...".
 6. **De-duplication** -- the same timetable header repeated across ten
-   PDFs only takes up one slot.
+   PDFs only takes up one slot, and one page/PDF fills at most
+   ``MAX_CHUNKS_PER_SOURCE`` slots.
+7. **Current-state pass** -- for questions about a role or "now" ("Who is
+   the HOD?", "current coordinator"), the newest chunks that mention the
+   role are always included, so a recent change is never missed.
 
 Every part is a separate class, so any of them can be replaced (e.g. a
 different reranker) without touching the others.
@@ -153,17 +157,65 @@ class HybridRetriever:
         scores, ids = self.index.search(vec, top_n)
         return [(int(i), float(s)) for s, i in zip(scores[0], ids[0]) if i != -1]
 
+    def _hybrid_relevance(self, candidates, keyword_hits, vector_hits) -> dict[int, float]:
+        """0..1 relevance from the methods' own scores (not their ranks), so
+        two equally good chunks get equal relevance and recency decides."""
+        kw_max = max((s for _, s in keyword_hits), default=0.0) or 1.0
+        kw = {i: s / kw_max for i, s in keyword_hits}
+        # Cosine scores of one model sit in a narrow band (e.g. 0.75-0.85);
+        # stretch that band to 0..1 so it carries as much weight as BM25.
+        vec_scores = [s for _, s in vector_hits]
+        lo, hi = (min(vec_scores), max(vec_scores)) if vec_scores else (0.0, 0.0)
+        vec = {i: (s - lo) / (hi - lo) if hi > lo else 1.0 for i, s in vector_hits}
+        methods = [m for m in (kw, vec) if m]
+        if not methods:
+            return {i: 0.0 for i in candidates}
+        return {i: sum(m.get(i, 0.0) for m in methods) / len(methods) for i in candidates}
+
+    def _newest_role_mentions(self, query: str, keyword_hits_wide) -> list[int]:
+        """For "who is the HOD (now)?"-type questions: the newest chunks that
+        mention the role, among those matching the question at all."""
+        words = {m.group(0).lower() for m in _TOKEN.finditer(query)}
+        roles = words & config.ROLE_TERMS
+        if not roles and not (words & config.PRESENT_TERMS):
+            return []
+        role_words = set(roles)
+        for r in roles:
+            for phrase in config.QUERY_SYNONYMS.get(r, []):
+                role_words.update(tokenize(phrase))
+        role_words &= config.ROLE_TERMS
+        if not role_words:
+            return []
+        mentions = [
+            i for i, _ in keyword_hits_wide
+            if self.chunks[i].get("date") and role_words & self.bm25.doc_tokens[i].keys()
+        ]
+        mentions.sort(key=lambda i: self.chunks[i]["date"], reverse=True)
+        picked, seen = [], set()
+        for i in mentions:
+            key = _dedupe_key(self.chunks[i]["text"])
+            if key not in seen:
+                seen.add(key)
+                picked.append(i)
+            if len(picked) >= config.NEWEST_ROLE_CHUNKS:
+                break
+        return picked
+
     def search(self, query: str, top_k: int = config.TOP_K, today: date | None = None) -> list[dict]:
         n = config.CANDIDATES_PER_RETRIEVER
-        keyword_hits = self.bm25.search(expand_query(query), n)
+        keyword_wide = self.bm25.search(expand_query(query), max(n, 300))
+        keyword_hits = keyword_wide[:n]
         vector_hits = self._vector_search(query, n)
+        newest_roles = self._newest_role_mentions(query, keyword_wide)
 
-        # Reciprocal Rank Fusion
+        # Reciprocal Rank Fusion, then make sure the newest role mentions
+        # are candidates too.
         fused: dict[int, float] = defaultdict(float)
         for hits in (keyword_hits, vector_hits):
             for rank, (idx, _score) in enumerate(hits):
                 fused[idx] += 1.0 / (60 + rank)
         ranked = sorted(fused, key=fused.get, reverse=True)
+        ranked = newest_roles + [i for i in ranked if i not in newest_roles]
 
         # Drop near-identical chunks before spending reranker time on them.
         candidates, seen = [], set()
@@ -173,40 +225,49 @@ class HybridRetriever:
                 continue
             seen.add(key)
             candidates.append(idx)
-            if len(candidates) >= config.RERANK_CANDIDATES:
+            if len(candidates) >= config.RERANK_CANDIDATES + len(newest_roles):
                 break
         if not candidates:
             return []
 
-        relevance = None
+        hybrid = self._hybrid_relevance(candidates, keyword_wide, vector_hits)
+        relevance = dict(hybrid)
         if self.reranker is not None:
             texts = [f"{self.chunks[i].get('title', '')}\n{self.chunks[i]['text']}" for i in candidates]
             try:
-                relevance = self.reranker.score(query, texts)
+                rerank = self.reranker.score(query, texts)
+                w = config.RERANKER_BLEND
+                relevance = {i: w * r + (1 - w) * hybrid[i] for i, r in zip(candidates, rerank)}
             except Exception as exc:  # model missing, offline, out of memory...
                 log.warning("Reranker unavailable (%s); continuing without it.", exc)
                 self.reranker = None  # don't retry on every question
-        if relevance is None:
-            # No reranker: average the methods' own scores (BM25 scaled to
-            # 0..1, cosine similarity is already 0..1). Unlike rank-based
-            # scores, two equally good chunks get equal relevance here, so
-            # the recency bonus decides between them.
-            kw_max = max((s for _, s in keyword_hits), default=0.0) or 1.0
-            kw = {i: s / kw_max for i, s in keyword_hits}
-            vec = {i: max(0.0, s) for i, s in vector_hits}
-            methods = [m for m in (kw, vec) if m]
-            relevance = [sum(m.get(i, 0.0) for m in methods) / len(methods) for i in candidates]
 
-        results = []
-        for idx, rel in zip(candidates, relevance):
+        scored = []
+        for idx in candidates:
             chunk = dict(self.chunks[idx])
             bonus = recency_bonus(chunk.get("date"), today)
-            chunk["relevance"] = round(float(rel), 4)
+            chunk["relevance"] = round(float(relevance[idx]), 4)
             chunk["recency_bonus"] = round(bonus, 4)
-            chunk["score"] = float(rel) + bonus
-            results.append(chunk)
+            chunk["score"] = float(relevance[idx]) + bonus
+            chunk["newest_role_mention"] = idx in newest_roles
+            scored.append((idx, chunk))
+        scored.sort(key=lambda pair: pair[1]["score"], reverse=True)
+
+        # Newest role mentions are always kept; the rest by score, with at
+        # most MAX_CHUNKS_PER_SOURCE from any one page/PDF.
+        results = [c for i, c in scored if i in newest_roles][:top_k]
+        per_source: dict[str, int] = defaultdict(int)
+        for c in results:
+            per_source[c["source_url"]] += 1
+        for i, c in scored:
+            if len(results) >= top_k:
+                break
+            if i in newest_roles or per_source[c["source_url"]] >= config.MAX_CHUNKS_PER_SOURCE:
+                continue
+            per_source[c["source_url"]] += 1
+            results.append(c)
         results.sort(key=lambda c: c["score"], reverse=True)
-        return results[:top_k]
+        return results
 
 
 # ---------------------------------------------------------------------------

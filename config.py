@@ -108,6 +108,19 @@ CANDIDATES_PER_RETRIEVER = 30  # how many each search method proposes
 # Switch it off entirely with RERANKER_MODEL=none.
 RERANKER_MODEL = _env("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 RERANK_CANDIDATES = _env_int("RERANK_CANDIDATES", 30)
+# Final relevance = this share from the reranker + the rest from the
+# keyword/meaning scores, so one model can't wipe out a strong match.
+RERANKER_BLEND = _env_float("RERANKER_BLEND", 0.5)
+# At most this many chunks from the same page/PDF in one answer.
+MAX_CHUNKS_PER_SOURCE = 2
+# "Current-state" questions (who holds a post now) always get the newest
+# chunks that mention the role, so the answer can't miss a recent change.
+ROLE_TERMS = {
+    "hod", "head", "dean", "coordinator", "director", "principal", "chairman",
+    "chairperson", "incharge", "convener", "registrar", "chancellor", "president",
+}
+PRESENT_TERMS = {"current", "currently", "now", "present", "presently", "abhi", "today", "latest"}
+NEWEST_ROLE_CHUNKS = 3
 # How strongly newer text is preferred when relevance is similar (0 = off).
 RECENCY_WEIGHT = _env_float("RECENCY_WEIGHT", 0.15)
 # Text older than this many years gets no recency bonus at all.
@@ -195,6 +208,9 @@ PROVIDER_SETTINGS = {
         "base_url": _env("OLLAMA_BASE_URL", "http://localhost:11434"),
         # If this model isn't pulled, the first installed model is used.
         "model": _env("OLLAMA_MODEL", "llama3.1"),
+        # Loading a big local model the first time can take minutes.
+        "timeout": _env_int("OLLAMA_TIMEOUT_SECONDS", 300),
+        "keep_alive": _env("OLLAMA_KEEP_ALIVE", "30m"),
     },
 }
 
