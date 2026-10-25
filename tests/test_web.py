@@ -135,3 +135,17 @@ def test_drive_pdf_sources_get_their_file_name_not_view():
     assert webapp._source_label(chunk) == "1st sem TT.pdf"
     chunk2 = {"source_url": "https://drive.google.com/file/d/abc/view", "source_type": "pdf", "title": ""}
     assert webapp._source_label(chunk2) == "Google Drive file"
+
+
+def test_saved_web_page_shows_only_main_content(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    (tmp_path / "raw" / "pages").mkdir(parents=True)
+    (tmp_path / "raw" / "pages" / "faculty.html").write_text(
+        "<html><head><title>Faculty</title></head><body><nav>Huge site menu</nav>"
+        "<div id='sp-main-body'><h2>Dr. X, HoD</h2><script>evil()</script></div></body></html>"
+    )
+    res = client.get("/files/raw/pages/faculty.html")
+    html = res.get_data(as_text=True)
+    assert res.status_code == 200
+    assert "Dr. X, HoD" in html and "Saved copy of <b>Faculty</b>" in html
+    assert "Huge site menu" not in html and "evil()" not in html

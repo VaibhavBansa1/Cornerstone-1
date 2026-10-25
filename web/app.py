@@ -145,20 +145,46 @@ def saved_file(subpath):
     if not path.is_file():
         return jsonify({"error": "Not found."}), 404
     if path.suffix.lower() == ".html":
-        # Point relative links/images at the live site so the saved page
-        # still shows pictures and its links work.
-        original = _original_url_for(subpath)
-        html = path.read_text(encoding="utf-8", errors="ignore")
-        if original:
-            banner = (
-                '<div style="background:#fff4e0;padding:6px 12px;font:13px sans-serif;'
-                'border-bottom:1px solid #e5c98f">Saved copy from the help desk index. '
-                f'<a href="{original}" target="_blank" rel="noopener">Open the live page</a></div>'
-            )
-            html = re.sub(r"(<head[^>]*>)", rf'\1<base href="{original}">', html, count=1, flags=re.I)
-            html = re.sub(r"(<body[^>]*>)", rf"\1{banner}", html, count=1, flags=re.I)
-        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+        return _clean_saved_page(path, _original_url_for(subpath)), 200, {"Content-Type": "text/html; charset=utf-8"}
     return send_from_directory(config.DATA_DIR, subpath)
+
+
+SAVED_PAGE_TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{base}<title>{title} (saved copy)</title>
+<style>
+body {{ font-family: "Segoe UI", Roboto, Arial, sans-serif; margin: 0; background: #f4f6f9; color: #1c1f24; line-height: 1.55; }}
+.bar {{ background: #1f3b73; color: #fff; padding: 10px 16px; font-size: 14px; }}
+.bar a {{ color: #fff; font-weight: 600; }}
+main {{ max-width: 860px; margin: 16px auto; background: #fff; border: 1px solid #dde2ea; border-radius: 12px; padding: 20px 24px; }}
+img {{ max-width: 100%; height: auto; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 14px; display: block; overflow-x: auto; }}
+td, th {{ border: 1px solid #dde2ea; padding: 6px 8px; vertical-align: top; }}
+h1, h2, h3 {{ color: #1f3b73; }}
+</style></head><body>
+<div class="bar">Saved copy of <b>{title}</b> from the help desk index{live}</div>
+<main>{content}</main></body></html>"""
+
+
+def _clean_saved_page(path: Path, original: str | None) -> str:
+    """Our saved copy of a web page, showing only its main content.
+
+    The college site's own styles and menus don't load outside the site,
+    so the raw page looks broken; this shows the readable part instead."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="ignore"), "html.parser")
+    title = soup.title.get_text(strip=True) if soup.title else path.stem
+    main = soup.find(id=config.MAIN_CONTENT_CONTAINER_ID) or soup.body or soup
+    for tag in main(["script", "style", "noscript", "iframe", "form", "nav", "aside"]):
+        tag.decompose()
+    esc = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")  # noqa: E731
+    return SAVED_PAGE_TEMPLATE.format(
+        base=f'<base href="{esc(original)}" target="_blank">' if original else "",
+        title=esc(title),
+        live=f' &middot; <a href="{esc(original)}" target="_blank" rel="noopener">Open the live page</a>' if original else "",
+        content=str(main),
+    )
 
 
 def _original_url_for(local_path: str) -> str | None:
