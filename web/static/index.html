@@ -3,37 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IT Department Help Desk</title>
+<title>IT Help Desk · MITS Gwalior</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-<div class="chat-wrap">
-  <div class="topbar">
-    <div class="logo">IT</div>
-    <div>
-      <h1>IT Department Help Desk</h1>
-      <div class="sub">MITS Gwalior &middot; answers from official department pages and documents</div>
-    </div>
-    <div class="right"><a href="/admin">Admin</a></div>
+<body class="chat-page">
+<header class="topbar">
+  <div class="logo">IT</div>
+  <div class="titles">
+    <h1>IT Help Desk</h1>
+    <div class="sub">School of Information Technology · MITS Gwalior</div>
   </div>
-  <div id="banner"></div>
-  <div class="messages" id="messages">
-    <div class="welcome" id="welcome">
-      <h2>Ask anything about the IT department</h2>
-      <div>Syllabus, time table, faculty, labs, notices&hellip; English, Hindi or Hinglish all work.</div>
-      <div class="suggest">
-        <button>What programs does the IT department offer?</button>
-        <button>Who is the head of the IT department?</button>
-        <button>5th sem ka syllabus kahan milega?</button>
-        <button>Which labs are available in the department?</button>
+  <div class="right">
+    <span class="status" id="status" title="Which AI is answering">Checking…</span>
+    <button class="ghost" id="newChat" type="button">New chat</button>
+    <a class="ghost" href="/admin">Admin</a>
+  </div>
+</header>
+<div id="banner"></div>
+
+<div class="layout">
+  <main class="chat-col">
+    <div class="messages" id="messages" aria-live="polite">
+      <div class="welcome" id="welcome">
+        <div class="welcome-logo">IT</div>
+        <h2>Hi! Ask me anything about the IT department</h2>
+        <p>Timetables, syllabus, faculty, notices, events. English, Hindi or Hinglish.
+           Every answer shows where it came from: click a number like <span class="cite demo">1</span> to see the source.</p>
+        <div class="suggest">
+          <button type="button">Who is the HOD of IT department?</button>
+          <button type="button">What is the timetable for B.Tech IT 5th semester?</button>
+          <button type="button">Who is the time table coordinator?</button>
+          <button type="button">3rd sem ke subjects kya hain?</button>
+        </div>
       </div>
     </div>
-  </div>
-  <form class="composer" id="composer">
-    <input id="q" autocomplete="off" placeholder="Type your question...">
-    <button id="send" type="submit">Send</button>
-  </form>
+    <form class="composer" id="composer">
+      <textarea id="q" rows="1" autocomplete="off" placeholder="Type your question…" aria-label="Your question"></textarea>
+      <button id="send" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20.5V14l9-2-9-2V3.5L22 12z"/></svg>
+      </button>
+    </form>
+    <div class="disclaimer">Answers come only from the department website and uploaded documents. Check important dates with the department office.</div>
+  </main>
+
+  <aside class="panel" id="panel" aria-label="Sources">
+    <div class="panel-head">
+      <div>
+        <h2>Sources</h2>
+        <div class="panel-sub" id="panelSub">Click a number in an answer to see where it came from.</div>
+      </div>
+      <button class="close" id="closePanel" type="button" aria-label="Close sources">&times;</button>
+    </div>
+    <div class="panel-body" id="panelBody">
+      <div class="panel-empty">No answer selected yet.</div>
+    </div>
+  </aside>
 </div>
+<div class="scrim" id="scrim"></div>
 <script src="/static/chat.js"></script>
 </body>
 </html>
