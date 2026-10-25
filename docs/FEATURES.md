@@ -39,20 +39,21 @@ Each box is a separate part. You can change one (a new AI model, a new embedding
 ## 5. Search — finding the right chunks
 **Why:** meaning search alone misses exact names and short words like "HOD".
 **What / How**, in order:
-1. **Keyword search** (BM25) with synonyms: HOD → head of department, head, dean.
+1. **Keyword search** (BM25) with synonyms: HOD → head of department, head, dean; "5th sem" → 5, fifth, V (documents write "Semester-V").
 2. **Meaning search** (vectors).
 3. **Merge** both lists.
 4. **Reranker**: a small model re-reads question + chunk and scores the fit (blended with steps 1–2 so it can't overrule a strong match).
 5. **Newer wins ties**: a small bonus for recent text.
-6. **Role questions** ("who is the HOD / dean / coordinator", "abhi", "current"): the newest documents that name a person in that role are always included.
+6. **Role questions** ("who is the HOD / dean / coordinator", "abhi", "current"): the newest documents that name a person in that role are always included, one per document.
 7. **No repeats**: duplicate text is dropped; max 2 chunks from one document.
 
 **Where:** `rag/retrieval.py`. See what each step did: `python scripts/debug_retrieval.py "your question"`.
 
 ## 6. Date-aware answers (stops "temporal hallucination")
 **Why:** an AI happily states an old fact as current if nothing tells it otherwise.
-**What:** the AI is told today's date, sees every source with its date, newest first, and must follow these rules: newest source = current; older ones only as "previously"; say "as of <month year>"; if the answer isn't in the sources, say so instead of guessing.
-**Where:** `SYSTEM_PROMPT` in `rag/pipeline.py`.
+**What:** the AI is told today's date, sees every source with its date, newest first, and must follow these rules: newest source = current; older ones only as "previously"; a post held "from X to Y" is over after Y; say "as of <month year>"; if the answer isn't in the sources, say so instead of guessing; reply in the student's language (English / Hinglish / Hindi).
+For role questions, code first builds a **timeline** of every named person + title found in the sources, newest first ("Sep 2026: Dr. Punit Kumar Johari, Dean, SOIT [1]"), and puts it at the top of the prompt, so the AI doesn't have to work out the order itself. Names are paired with the *nearest* title, and names inside timetable rows are ignored.
+**Where:** `SYSTEM_PROMPT` and `build_prompt()` in `rag/pipeline.py`, `role_holders()` in `rag/retrieval.py`. See the exact AI input: `python -m rag.pipeline --show-prompt "your question"`.
 
 ## 7. Any AI model, with automatic backup
 **Why:** free APIs have small limits; a demo must not die because one says "too many requests".
@@ -79,12 +80,19 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | Start the website | `uv run -m web.app` → http://localhost:5000 |
 | Check answer quality on test questions | `uv run scripts/ask_batch.py` → `data/eval_answers.md` |
+| Check the crawl got everything | `uv run scripts/check_crawl.py --live` |
+| See why a chunk was / wasn't found | `uv run scripts/debug_retrieval.py "question" "expected text"` |
+| See exactly what the AI receives | `uv run -m rag.pipeline --show-prompt "question"` |
 | Run tests | `uv run pytest tests -q` |
 
 ## Why not LlamaIndex?
 LlamaIndex is a toolbox that contains these same parts (chunking, hybrid search, rerankers, model connectors). Switching would not fix anything by itself. The HOD bug was a *data* problem (no dates) plus a *prompt* problem, and that is fixed here. Our own code is a few hundred lines you can explain line by line in a viva. If you ever want it, it can replace `rag/retrieval.py` behind the same interface without touching the rest.
 
+## Crawl check (25 Oct 2026, real data)
+`check_crawl.py --live` result: 29 pages, 348 files saved; re-reading every saved page finds **0 links that were silently skipped**; today's department menu has 28 links and **all 28 are crawled**; only 2 failures (one >25 MB Drive file, one dead link). An earlier crawl had been stopped after 2 minutes; it overwrote 61 files but the complete manifest survived and all files were intact. Since then, stopping can no longer leave half-written files (tested in `tests/test_crawler_robustness.py`).
+
 ## Still to solve
+0. **The local Ollama model (12B) is the weakest link.** With the right sources and timeline in front of it, it still sometimes calls a former HOD current. Use a larger model for the demo (`LLM_PROVIDERS=groq,openrouter,ollama` with a key), or a stronger local model.
 1. **Scanned PDFs**: 93 of 263 PDFs are images with no text, so the bot can't read them. Needs OCR (e.g. Tesseract) during ingestion.
 2. **Big Google Drive files** (>25 MB) are skipped; 1 right now.
 3. **Re-crawl on a schedule** so new notices appear without anyone running a command.
