@@ -1,0 +1,81 @@
+// System architecture of the MITS IT Help Desk.
+// Render:  dot -Tpng -Gdpi=150 architecture.dot -o architecture.png
+// Read it as three columns: INDEXING (left, offline) fills data/ (middle),
+// ANSWERING (right, live) reads data/. [Dn] = decision, see architecture.md.
+digraph architecture {
+  graph [rankdir=TB, fontname="DejaVu Sans", nodesep=0.55, ranksep=0.42, pad=0.35,
+         newrank=true, splines=true, bgcolor="white", labelloc=t, fontsize=17,
+         label=<<B>MITS IT Help Desk — system architecture</B><BR/><FONT POINT-SIZE="10">Solid box = our code (file in grey) · Double box = outside system · Dashed = stored data · [Dn] = design decision (see architecture.md)</FONT><BR/> >];
+  node  [shape=box, fontname="DejaVu Sans", fontsize=11, color=black, penwidth=1.3,
+         style=filled, fillcolor=white, margin="0.15,0.08", width=3.3];
+  edge  [fontname="DejaVu Sans", fontsize=9, color=black, arrowsize=0.7];
+
+  // ---------- outside systems ----------
+  site      [peripheries=2, label=<<B>MITS website</B><BR/><FONT POINT-SIZE="9">web.mitsgwalior.in — IT dept pages<BR/>+ linked PDFs / Google Drive files</FONT>>];
+  browser   [peripheries=2, label=<<B>Browser</B><BR/><FONT POINT-SIZE="9">student chat page · admin page</FONT>>];
+  providers [peripheries=2, label=<<B>AI model — first one that works</B><BR/><FONT POINT-SIZE="9">OpenRouter · Groq · GitHub Models · Gemini<BR/>Anthropic · OpenAI · LM Studio · Ollama (local)</FONT>>];
+
+  // ---------- INDEXING ----------
+  subgraph cluster_index {
+    label=<<B>INDEXING</B> (offline)<BR/><FONT POINT-SIZE="9" FACE="DejaVu Sans Mono">python run_pipeline.py</FONT>>;
+    style=rounded; color=black; penwidth=1.3; fontsize=12; margin=12; labeljust=l;
+    crawl [label=<<B>1 · Crawl</B>   [D1 D2]<BR/><FONT POINT-SIZE="9">IT pages only, each URL once,<BR/>save pages + files, retry once</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">scraper/crawler.py</FONT>>];
+    read  [label=<<B>2 · Read text</B>   [D3]<BR/><FONT POINT-SIZE="9">HTML / PDF / DOCX → text<BR/>scanned pages → OCR (cached)</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/readers.py · ocr.py</FONT>>];
+    name  [label=<<B>3 · Name &amp; date</B>   [D4 D5]<BR/><FONT POINT-SIZE="9">"CLICK HERE" → "V SEM · 2024-28 BATCH"<BR/>date: text › batch › file › server</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/link_labels.py · dates.py</FONT>>];
+    chunk [label=<<B>4 · Chunk</B>   [D6]<BR/><FONT POINT-SIZE="9">~900-char pieces cut at paragraphs<BR/>+ one course-list piece per document</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/chunking.py · course_list.py</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/build.py (runs 2–4)</FONT>>];
+    embed [label=<<B>5 · Embed + index</B>   [D7]<BR/><FONT POINT-SIZE="9">multilingual e5-small, GPU if present<BR/>→ FAISS vector index</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/embeddings.py · embed_index.py</FONT>>];
+    crawl -> read -> name -> chunk -> embed [weight=10];
+  }
+
+  // ---------- data/ ----------
+  subgraph cluster_data {
+    label=<<B>data/</B><BR/><FONT POINT-SIZE="9">not in git — rebuilt by the pipeline</FONT>>;
+    style="rounded,dashed"; color=black; fontsize=12; margin=12;
+    node [style="rounded,dashed,filled", width=2.7, fontsize=10];
+    d_raw   [label=<<B>raw/ + manifest.json</B><BR/><FONT POINT-SIZE="9">saved pages &amp; files,<BR/>what came from where</FONT>>];
+    d_up    [label=<<B>uploads/</B>   [D14]<BR/><FONT POINT-SIZE="9">admin-uploaded PDF / DOCX / TXT</FONT>>];
+    d_proc  [label=<<B>processed/</B><BR/><FONT POINT-SIZE="9">chunks.jsonl<BR/>pdf_text_cache/ (OCR results)</FONT>>];
+    d_index [label=<<B>index/</B><BR/><FONT POINT-SIZE="9">faiss.index · chunks_meta.jsonl<BR/>index_info.json (which model)</FONT>>];
+    d_log   [label=<<B>chat_log.db</B>   [D13]<BR/><FONT POINT-SIZE="9">written by the web server: counts &amp;<BR/>cited sources only — no question text</FONT>>];
+    d_raw -> d_up -> d_proc -> d_index -> d_log [style=invis, weight=10];
+  }
+
+  // ---------- ANSWERING ----------
+  subgraph cluster_answer {
+    label=<<B>ANSWERING</B> (live, per question)<BR/><FONT POINT-SIZE="9" FACE="DejaVu Sans Mono">python -m web.app</FONT>>;
+    style=rounded; color=black; penwidth=1.3; fontsize=12; margin=12; labeljust=l;
+    app    [label=<<B>Web server</B>   [D13 D14]<BR/><FONT POINT-SIZE="9">chat + admin API, saved copies,<BR/>upload → background rebuild</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">web/app.py · sources.py · chatlog.py</FONT>>];
+    under  [label=<<B>A · Understand question</B>   [D8]<BR/><FONT POINT-SIZE="9">"5th sem syllabus 2026" → 5th sem ·<BR/>2024-28 batch · July-Dec 2026 · syllabus</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/query_understanding.py</FONT>>];
+    search [label=<<B>B · Search</B>   [D9 D10]<BR/><FONT POINT-SIZE="9">keywords + meaning → merge → rerank<BR/>+ newer / right-batch / role boosts → top 6</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/retrieval.py · roles.py</FONT>>];
+    prompt [label=<<B>C · Build prompt</B>   [D11]<BR/><FONT POINT-SIZE="9">today's date · "understood as" · role timeline<BR/>dated sources, newest first · strict rules</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/pipeline.py</FONT>>];
+    llm    [label=<<B>D · Ask the AI</B>   [D12]<BR/><FONT POINT-SIZE="9">providers in order, skip rate-limited;<BR/>none left → show passages instead</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/llm/</FONT>>];
+    app -> under -> search -> prompt -> llm [weight=10];
+  }
+
+  cfg [shape=note, width=2.2, fontsize=10, label=<<B>config.py</B><BR/><FONT POINT-SIZE="9">every setting in one place,<BR/>each overridable by env variable</FONT>>];
+
+  // ---------- rows: matching steps side by side ----------
+  { rank=same; site; cfg; browser; }
+  { rank=same; crawl; d_raw; app; }
+  { rank=same; read; d_up; under; }
+  { rank=same; name; d_proc; search; }
+  { rank=same; chunk; d_index; prompt; }
+  { rank=same; embed; d_log; llm; }
+  site -> cfg -> browser [style=invis];
+  crawl -> d_raw -> app [style=invis];
+
+  // ---------- data flow ----------
+  site    -> crawl  [label=" HTTP GET\n (robots.txt)"];
+  browser -> app    [dir=both, label=" question ⇄ answer\n + clickable sources"];
+  llm     -> providers [dir=both, label=" plain HTTP"];
+  crawl   -> d_raw  [style=dashed, constraint=false, label="saves"];
+  d_up    -> read   [style=dashed, constraint=false, label="uploads go through\nthe same steps"];
+  read    -> d_proc [style=dashed, constraint=false, label="OCR cache"];
+  chunk   -> d_proc [style=dashed, constraint=false, label="chunks"];
+  embed   -> d_index[style=dashed, constraint=false, label="vectors"];
+  app     -> d_raw  [style=dashed, constraint=false, label="Saved copy\n(raw/, uploads/ only)"];
+  app     -> d_up   [style=dashed, constraint=false, label="upload"];
+  search  -> d_index[style=dashed, constraint=false, label="reads"];
+  providers [group=a];
+  llm -> providers [style=invis, weight=5];
+}
