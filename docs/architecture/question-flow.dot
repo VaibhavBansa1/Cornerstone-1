@@ -1,0 +1,45 @@
+// One real question, step by step (values captured from the real index, Oct 2026).
+// Render:  dot -Tpng -Gdpi=150 question-flow.dot -o question-flow.png
+digraph question_flow {
+  graph [rankdir=TB, fontname="DejaVu Sans", ranksep=0.28, pad=0.35, bgcolor=white, labelloc=t, fontsize=17,
+         label=<<B>What happens to one question</B><BR/><FONT POINT-SIZE="10">Left: the step and its file · Right: what it actually produced for this question</FONT><BR/> >];
+  node  [shape=plain, fontname="DejaVu Sans", fontsize=10];
+  edge  [color=black, arrowsize=0.7];
+
+  q [shape=box, peripheries=2, margin="0.25,0.1", fontsize=13,
+     label=<Student types: <B>"fifth semester student syllabus 2026"</B>>];
+
+  a [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>A · Understand the question</B>  [D8]<BR/>work out semester, batch, session, topic<BR/>from the words — no AI call, rules only<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/query_understanding.py</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L"><B>5th sem · 2024-28 batch · July-Dec 2026 · syllabus</B><BR/>why: "2026 is the session year, so the 5th sem<BR/>batch is 2024-28" (a 2026 batch can't be in 5th sem yet)</TD></TR></TABLE>>];
+
+  b1 [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>B1 · Keyword search</B>  [D9]<BR/>BM25 over 9,348 chunks; title words count 3×;<BR/>synonyms + number forms + step A's batch added<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/retrieval.py · BM25, expand_query</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">searched words: fifth, semester, student, syllabus, 2026,<BR/>5, 5th, v, scheme, curriculum, <B>2024, 28, batch</B>, sem<BR/>→ top 30 chunks</TD></TR></TABLE>>];
+
+  b2 [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>B2 · Meaning search</B>  [D7 D9]<BR/>question → vector (e5-small) → nearest<BR/>chunks in the FAISS index<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/embeddings.py · retrieval.py</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">top hits: a 2021 feedback PDF, then the<BR/><B>2023-27</B> batch's 5th sem syllabus — right topic,<BR/>wrong batch. <I>Why meaning search alone isn't enough.</I></TD></TR></TABLE>>];
+
+  b3 [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>B3 · Merge + always include</B>  [D9 D10]<BR/>both lists merged (Reciprocal Rank Fusion);<BR/>documents filed under the understood batch<BR/>are always added, course lists first<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">HybridRetriever.search · _batch_matches</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">always included:<BR/>• course list of <B>V SEM · 2024-28 BATCH</B><BR/>• best chunk of the same syllabus PDF</TD></TR></TABLE>>];
+
+  b4 [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>B4 · Score + pick 6</B>  [D10]<BR/>relevance (reranker 50% + search 50%)<BR/>+ newer: up to +0.15<BR/>+ right batch +0.30 / other batch −0.30<BR/>at most 2 chunks per document<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/retrieval.py · roles.py</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L"><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9">relevance + newer + batch = score<BR/>V SEM 2024-28 syllabus   0.55 + 0.14 + 0.30 = 0.99<BR/>Syllabus page (Jul 2025) 0.83 + 0.12 + 0    = 0.95<BR/>V SEM 2024-28 courses    0.37 + 0.14 + 0.30 = 0.81<BR/>V SEM 2023-27 syllabus   0.69 + 0.12 − 0.30 = 0.51<BR/>… + 2 older documents</FONT></TD></TR></TABLE>>];
+
+  c [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>C · Build the prompt</B>  [D11]<BR/>rules + today's date + how the question<BR/>was understood + 6 dated sources,<BR/>newest first, numbered [1]…[6]<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/pipeline.py · build_prompt</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">starts with: "Question understood as: 5th sem ·<BR/>2024-28 batch · July-Dec 2026 session · syllabus"<BR/>rules include: newest source = current; course codes<BR/>are batch-specific, quote them from that batch's file<BR/>~7,500 characters in total</TD></TR></TABLE>>];
+
+  d [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>D · Ask the AI</B>  [D12]<BR/>first provider that answers; rate-limited<BR/>ones skipped for 60 s; none → passages<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">rag/llm/registry.py · http_providers.py</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">answer lists all 7 courses with their codes, e.g.<BR/>16243101 Mobile Computing &amp; Wireless Network [2]<BR/>16243102 Theory of Computation [2] …</TD></TR></TABLE>>];
+
+  e [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" WIDTH="760">
+    <TR><TD WIDTH="300" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT"><B>E · Show it</B>  [D13]<BR/>answer + clickable sources; only counts<BR/>are logged, never the question text<BR/><FONT FACE="DejaVu Sans Mono" POINT-SIZE="9" COLOR="#555555">web/app.py · sources.py · static/chat.js</FONT></TD>
+        <TD WIDTH="460" ALIGN="LEFT" VALIGN="TOP" BALIGN="LEFT" BORDER="1" SIDES="L">"Understood as: 5th sem · 2024-28 batch …" line<BR/>click <B>[2]</B> → Sources panel → the course list +<BR/><B>Open original</B> (Google Drive) / <B>Saved copy</B> (our file)</TD></TR></TABLE>>];
+
+  q -> a -> b1 -> b2 -> b3 -> b4 -> c -> d -> e;
+}
