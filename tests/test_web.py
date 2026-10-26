@@ -6,6 +6,7 @@ import pytest
 import config
 from rag import pipeline
 from web import app as webapp
+from web import sources
 
 
 @pytest.fixture
@@ -83,9 +84,9 @@ def test_upload_requires_admin_password_and_allowed_type(client):
 
 
 def test_cited_numbers_understands_grouped_citations():
-    assert webapp.cited_numbers("See [2].") == {2}
-    assert webapp.cited_numbers("From [4, 5, 6] and [1][3]") == {1, 3, 4, 5, 6}
-    assert webapp.cited_numbers("Range [2-4]") == {2, 3, 4}
+    assert sources.cited_numbers("See [2].") == {2}
+    assert sources.cited_numbers("From [4, 5, 6] and [1][3]") == {1, 3, 4, 5, 6}
+    assert sources.cited_numbers("Range [2-4]") == {2, 3, 4}
 
 
 def test_saved_copy_is_served_but_only_from_data_folders(client, tmp_path, monkeypatch):
@@ -132,9 +133,9 @@ def test_answer_sources_carry_open_links(client, monkeypatch, tmp_path):
 def test_drive_pdf_sources_get_their_file_name_not_view():
     chunk = {"source_url": "https://drive.google.com/file/d/abc/view", "source_type": "pdf",
              "title": "Time Table - MITS Gwalior - 1st sem TT.pdf"}
-    assert webapp._source_label(chunk) == "1st sem TT.pdf"
+    assert sources.source_label(chunk) == "1st sem TT.pdf"
     chunk2 = {"source_url": "https://drive.google.com/file/d/abc/view", "source_type": "pdf", "title": ""}
-    assert webapp._source_label(chunk2) == "Google Drive file"
+    assert sources.source_label(chunk2) == "Google Drive file"
 
 
 def test_saved_web_page_shows_only_main_content(client, tmp_path, monkeypatch):
@@ -155,7 +156,7 @@ def test_site_pdf_uses_real_file_name_not_internal_slug():
     chunk = {"source_url": "https://web.mitsgwalior.in/images/BoS/8.%20BoS%20MEETING%202021.pdf",
              "source_type": "pdf",
              "title": "Board of Studies (BoS) - MITS Gwalior - images__BoS__8.%20BoS%20MEETING%202021.pdf__c427dbbf.pdf"}
-    assert webapp._source_label(chunk) == "8. BoS MEETING 2021.pdf"
+    assert sources.source_label(chunk) == "8. BoS MEETING 2021.pdf"
 
 
 def test_question_text_is_never_stored(client, monkeypatch):

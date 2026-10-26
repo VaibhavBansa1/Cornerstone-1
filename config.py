@@ -129,13 +129,12 @@ RERANK_CANDIDATES = _env_int("RERANK_CANDIDATES", 30)
 RERANKER_BLEND = _env_float("RERANKER_BLEND", 0.5)
 # At most this many chunks from the same page/PDF in one answer.
 MAX_CHUNKS_PER_SOURCE = 2
-# "Current-state" questions (who holds a post now) always get the newest
-# chunks that mention the role, so the answer can't miss a recent change.
+# Role questions ("who is the HOD?") always get the newest chunks that name
+# someone in that role, so the answer can't miss a recent change.
 ROLE_TERMS = {
     "hod", "head", "dean", "coordinator", "director", "principal", "chairman",
     "chairperson", "incharge", "convener", "registrar", "chancellor", "president",
 }
-PRESENT_TERMS = {"current", "currently", "now", "present", "presently", "abhi", "today", "latest"}
 NEWEST_ROLE_CHUNKS = 3
 # How strongly newer text is preferred when relevance is similar (0 = off).
 RECENCY_WEIGHT = _env_float("RECENCY_WEIGHT", 0.15)

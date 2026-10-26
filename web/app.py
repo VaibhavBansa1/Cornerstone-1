@@ -14,24 +14,31 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import unquote
 
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 import config
 from ingestion.dates import label as date_label
-from ingestion.extract import build_chunks, write_chunks
+from ingestion.build import build_chunks, write_chunks
 from rag import llm, pipeline
 from rag.embed_index import build_index, read_index_info
 from rag.embeddings import resolve_device
 from rag.retrieval import IndexMismatchError
 from web import chatlog
+from web.sources import (
+    cited_numbers,
+    original_url_for,
+    public_source,
+    render_saved_page,
+    saved_copy_link,
+    source_label,
+)
 
 log = logging.getLogger("web")
 
@@ -42,89 +49,6 @@ app = Flask(__name__, static_folder=None)
 
 _rebuild_lock = threading.Lock()
 _rebuild_state = {"running": False, "last_error": None, "finished_at": None}
-
-
-def _source_label(chunk: dict) -> str:
-    """Short, human name for a source card. A file linked as "CLICK HERE"
-    in a table gets its table position ("Syllabus · V SEM · 2024-28 BATCH");
-    otherwise the file name for documents and the page title for pages."""
-    label = (chunk.get("link_label") or "").strip()
-    if label and chunk.get("source_type") != "page":
-        page = (chunk.get("title") or "").split(" - ")[0].strip()
-        if page and page.lower() not in label.lower():
-            return f"{page} · {label}"
-        return label
-    return unquote(_raw_source_label(chunk))
-
-
-def _raw_source_label(chunk: dict) -> str:
-    title = (chunk.get("title") or "").strip()
-    if chunk.get("source_type") == "upload":
-        return title or chunk["source_url"].removeprefix("upload://")
-    if chunk.get("source_type") in ("pdf", "image", "audio", "video", "document"):
-        # PDFs are titled "<page title> - <file name>"; Drive links end in
-        # "/view", so the URL is no good as a name.
-        url_name = chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
-        if " - " in title:
-            name = title.rsplit(" - ", 1)[-1].strip()
-            # "uc__1a2b.pdf" / "images__Dept__x.pdf__9f3e.pdf" are our own
-            # saved-file names; the link's last part is the real file name.
-            looks_internal = name.lower().startswith("uc__") or "__" in name
-            if name and not looks_internal:
-                return name
-            if looks_internal and url_name.lower() not in ("view", "edit", "preview"):
-                return url_name
-        name = url_name
-        if name.lower() in ("view", "edit", "preview") or name.startswith("uc?"):
-            return title or "Google Drive file"
-        return name
-    return title.replace(" - MITS Gwalior", "") or chunk["source_url"].rstrip("/").rsplit("/", 1)[-1]
-
-
-def _saved_copy_link(chunk: dict) -> str | None:
-    """URL of our own downloaded copy of this source (works even if the
-    college site or Google Drive is down; the only link for uploads)."""
-    local = (chunk.get("local_path") or "").replace("\\", "/")
-    if not local or not (config.DATA_DIR / local).exists():
-        return None
-    return "/files/" + quote(local)
-
-
-def _public_source(n: int, chunk: dict) -> dict:
-    url = chunk["source_url"]
-    return {
-        "n": n,
-        "title": _source_label(chunk),
-        "doc_title": chunk.get("title") or "",
-        "source_url": url,
-        "link": None if url.startswith("upload://") else url,
-        "saved_copy": _saved_copy_link(chunk),
-        "source_type": chunk.get("source_type"),
-        "score": round(chunk.get("score", 0.0), 3),
-        "date": date_label(chunk.get("date")),
-        "snippet": chunk["text"][:400],
-        "text": chunk["text"],
-    }
-
-
-_CITATION = re.compile(r"\[(\s*\d+(?:\s*[,\u2013-]\s*\d+)*\s*)\]")
-
-
-def cited_numbers(answer: str) -> set[int]:
-    """Source numbers cited in an answer: [2], [1, 3], [4-6] and [1][2]."""
-    found: set[int] = set()
-    for group in _CITATION.findall(answer or ""):
-        for part in group.split(","):
-            part = part.strip()
-            bounds = re.split(r"\s*[\u2013-]\s*", part)
-            if len(bounds) == 2 and all(b.isdigit() for b in bounds):
-                lo, hi = int(bounds[0]), int(bounds[1])
-                if 0 < hi - lo < 20:
-                    found.update(range(lo, hi + 1))
-                    continue
-            if part.isdigit():
-                found.add(int(part))
-    return found
 
 
 def _check_admin():
@@ -164,59 +88,10 @@ def saved_file(subpath):
     if not path.is_file():
         return jsonify({"error": "Not found."}), 404
     if path.suffix.lower() == ".html":
-        return _clean_saved_page(path, _original_url_for(subpath)), 200, {"Content-Type": "text/html; charset=utf-8"}
+        return render_saved_page(path, original_url_for(subpath)), 200, {"Content-Type": "text/html; charset=utf-8"}
     return send_from_directory(config.DATA_DIR, subpath)
 
 
-SAVED_PAGE_TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-{base}<title>{title} (saved copy)</title>
-<style>
-body {{ font-family: "Segoe UI", Roboto, Arial, sans-serif; margin: 0; background: #f4f6f9; color: #1c1f24; line-height: 1.55; }}
-.bar {{ background: #1f3b73; color: #fff; padding: 10px 16px; font-size: 14px; }}
-.bar a {{ color: #fff; font-weight: 600; }}
-main {{ max-width: 860px; margin: 16px auto; background: #fff; border: 1px solid #dde2ea; border-radius: 12px; padding: 20px 24px; }}
-img {{ max-width: 100%; height: auto; }}
-table {{ border-collapse: collapse; width: 100%; font-size: 14px; display: block; overflow-x: auto; }}
-td, th {{ border: 1px solid #dde2ea; padding: 6px 8px; vertical-align: top; }}
-h1, h2, h3 {{ color: #1f3b73; }}
-</style></head><body>
-<div class="bar">Saved copy of <b>{title}</b> from the help desk index{live}</div>
-<main>{content}</main></body></html>"""
-
-
-def _clean_saved_page(path: Path, original: str | None) -> str:
-    """Our saved copy of a web page, showing only its main content.
-
-    The college site's own styles and menus don't load outside the site,
-    so the raw page looks broken; this shows the readable part instead."""
-    from bs4 import BeautifulSoup
-
-    soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="ignore"), "html.parser")
-    title = soup.title.get_text(strip=True) if soup.title else path.stem
-    main = soup.find(id=config.MAIN_CONTENT_CONTAINER_ID) or soup.body or soup
-    for tag in main(["script", "style", "noscript", "iframe", "form", "nav", "aside"]):
-        tag.decompose()
-    esc = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")  # noqa: E731
-    return SAVED_PAGE_TEMPLATE.format(
-        base=f'<base href="{esc(original)}" target="_blank">' if original else "",
-        title=esc(title),
-        live=f' &middot; <a href="{esc(original)}" target="_blank" rel="noopener">Open the live page</a>' if original else "",
-        content=str(main),
-    )
-
-
-def _original_url_for(local_path: str) -> str | None:
-    if not pipeline.index_exists():
-        return None
-    try:
-        _index, chunks = pipeline._load_index()
-    except Exception:
-        return None
-    for c in chunks:
-        if (c.get("local_path") or "").replace("\\", "/") == local_path:
-            return c["source_url"]
-    return None
 
 
 @app.get("/api/status")
@@ -252,7 +127,7 @@ def query():
         return jsonify({"error": str(exc)}), 503
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
-    sources = [_public_source(i, c) for i, c in enumerate(result["sources"], 1)]
+    sources = [public_source(i, c) for i, c in enumerate(result["sources"], 1)]
     # When no LLM answered, the pipeline returns the retrieved passages
     # instead; the UI then shows those passages.
     generated = result.get("generated", result["provider"] != "none")
@@ -278,18 +153,18 @@ def query():
 def documents():
     if not pipeline.index_exists():
         return jsonify({"documents": []})
-    _index, chunks = pipeline._load_index()
+    chunks = pipeline.indexed_chunks()
     docs: OrderedDict[str, dict] = OrderedDict()
     for c in chunks:
         doc = docs.setdefault(
             c["source_url"],
             {
-                "title": _source_label(c),
+                "title": source_label(c),
                 "source_url": c["source_url"],
                 "source_type": c.get("source_type"),
                 "chunks": 0,
                 "date": date_label(c.get("doc_date") or c.get("date")),
-                "saved_copy": _saved_copy_link(c),
+                "saved_copy": saved_copy_link(c),
                 "deletable": c.get("source_type") == "upload",
             },
         )
@@ -302,7 +177,7 @@ def stats():
     by_url: dict[str, dict] = {}
     if pipeline.index_exists():
         try:
-            _index, chunks = pipeline._load_index()
+            chunks = pipeline.indexed_chunks()
             for c in chunks:
                 by_url.setdefault(c["source_url"], c)
         except Exception:
@@ -310,12 +185,12 @@ def stats():
 
     def label_for(url):
         chunk = by_url.get(url)
-        return _source_label(chunk) if chunk else unquote(url.rstrip("/").rsplit("/", 1)[-1]) or None
+        return source_label(chunk) if chunk else unquote(url.rstrip("/").rsplit("/", 1)[-1]) or None
 
     def link_for(url):
         chunk = by_url.get(url)
         if url.startswith("upload://"):
-            return _saved_copy_link(chunk) if chunk else None
+            return saved_copy_link(chunk) if chunk else None
         return url if url.startswith("http") else None
 
     data = chatlog.stats(label_for=label_for, link_for=link_for)

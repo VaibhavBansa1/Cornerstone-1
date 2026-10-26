@@ -18,12 +18,15 @@ How it works, step by step:
 6. **De-duplication** -- the same timetable header repeated across ten
    PDFs only takes up one slot, and one page/PDF fills at most
    ``MAX_CHUNKS_PER_SOURCE`` slots.
-7. **Current-state pass** -- for questions about a role or "now" ("Who is
-   the HOD?", "current coordinator"), the newest chunks that mention the
-   role are always included, so a recent change is never missed.
+7. **Role pass** -- for "who is the HOD/dean/coordinator" questions, the
+   newest chunks that name someone in that role are always included, so a
+   recent change is never missed (name/title matching: rag/roles.py).
+8. **Batch pass** -- when query understanding worked out a batch/semester
+   (rag/query_understanding.py), documents filed under it ("V SEM · 2024-28
+   BATCH") get a bonus and are always included; other batches' get a penalty.
 
-Every part is a separate class, so any of them can be replaced (e.g. a
-different reranker) without touching the others.
+BM25, the reranker and the retriever are separate classes, so any of them
+can be replaced (e.g. a different reranker) without touching the others.
 """
 from __future__ import annotations
 
@@ -37,7 +40,7 @@ from datetime import date
 import numpy as np
 
 import config
-from rag import query_understanding as qu
+from rag import roles
 
 log = logging.getLogger("rag.retrieval")
 
@@ -63,21 +66,6 @@ for _n in range(1, 9):
     _forms = [str(_n), f"{_n}{_SUFFIX[_n - 1]}", _ROMAN[_n - 1], _WORDS[_n - 1]]
     for _f in _forms:
         NUMBER_FORMS[_f] = [x for x in _forms if x != _f]
-
-
-def session_start_year(today: date | None = None) -> int:
-    """Academic sessions run July-June: Oct 2026 -> 2026, Mar 2027 -> 2026."""
-    return qu.session_start_year(today or date.today())
-
-
-def batch_for_semester(semester: int, today: date | None = None) -> int:
-    """Admission year of the batch in ``semester`` now: 5th sem in 2026-27 -> 2024."""
-    return qu.batch_in(semester, today or date.today())
-
-
-def semester_for_batch(admitted: int, today: date | None = None) -> int:
-    """Which semester a batch is in right now: 2024 batch in Oct 2026 -> 5."""
-    return qu.semester_of(admitted, today or date.today())
 
 
 def expand_query(query: str, extra_terms: list[str] | None = None) -> list[str]:
@@ -173,102 +161,6 @@ def recency_bonus(chunk_date: str | None, today: date | None = None) -> float:
 
 
 # A person's name: title + up to 4 capitalised words, all on ONE line.
-_NAME = r"(?:Dr|Prof|Mr|Ms|Mrs|Shri|Smt)\.?[ \t]+[A-Z][\w.]*(?:[ \t]+[A-Z][\w.]*){0,3}"
-
-
-def _role_holder_pattern(role_words: set[str]) -> re.Pattern:
-    """Matches a person's name close to a role word, e.g.
-    "(Dr. Punit K Johari) Dean, School of IT" or "HoD: Dr. Sanjiv Sharma"."""
-    roles = "|".join(sorted(re.escape(r) for r in role_words))
-    # PDFs often put the name and the title on separate lines, so up to 40
-    # characters of anything (line breaks included) may sit between them.
-    return re.compile(
-        rf"{_NAME}[\s\S]{{0,40}}?\b(?:{roles})\b|\b(?:{roles})\b[\s\S]{{0,40}}?{_NAME}",
-        re.I,
-    )
-
-
-_NAME_RE = re.compile(_NAME)
-_TITLE_WORDS = {"professor", "&", "and", "associate", "assistant", "time", "table", "time-table", "prof", "deputy", "vice"}
-
-
-def role_holders(text: str, role_words: set[str]) -> list[tuple[str, str]]:
-    """(name, title) pairs, pairing each title with the NEAREST name.
-
-    College documents usually put the name just before the title
-    ("(Dr. Punit K Johari)\nDean, School of IT"), sometimes after it
-    ("HoD: Dr. Sanjiv Sharma"). Lists of names are common, so the closest
-    name wins -- never just the first one in range.
-    """
-    roles = "|".join(sorted(re.escape(r) for r in role_words))
-    pairs = []
-    for m in re.finditer(rf"\b(?:{roles})\b", text, re.I):
-        before = text[max(0, m.start() - 45): m.start()]
-        names_before = list(_NAME_RE.finditer(before))
-        name = None
-        if names_before:
-            last = names_before[-1]
-            gap = before[last.end():]
-            # A name on an earlier line that also has times/numbers is a
-            # table row ("04:00-05:00 PM Prof. X"), not a signature.
-            if "\n" in gap:
-                name_line = before[: last.end()].rsplit("\n", 1)[-1]
-                if not re.search(r"\d", name_line):
-                    name = last.group(0)
-            else:
-                name = last.group(0)
-        if not name:
-            after = _NAME_RE.search(text, m.end(), m.end() + 45)
-            name = after.group(0) if after else None
-        if not name:
-            continue
-        name = re.sub(r"\s+", " ", name).strip()
-        # drop title words the greedy name pattern may have swallowed
-        name = re.split(rf"\s+(?:{roles}|Professor|Associate|Assistant|Time|Table|Coordinator)\b", name, flags=re.I)[0]
-        # Title = title-ish words just before the role on the same line
-        # ("Professor &", "Time Table") + the role + the rest of its line,
-        # stopping before any other name.
-        line_start = text.rfind("\n", 0, m.start()) + 1
-        prefix_words = re.split(r"[\s,()]+", text[line_start: m.start()])
-        prefix = []
-        for w in reversed([w for w in prefix_words if w]):
-            if w.lower().strip(".") in _TITLE_WORDS:
-                prefix.insert(0, w)
-            else:
-                break
-        line_end = text.find("\n", m.end())
-        rest = text[m.end(): (m.end() + 35) if line_end == -1 else min(line_end, m.end() + 35)]
-        other = _NAME_RE.search(rest)
-        if other:
-            rest = rest[: other.start()]
-        rest = re.split(r"\s\d{1,2}[:.]\d{2}", rest)[0]  # drop "11:00-12:00" etc.
-        title = re.sub(r"\s+", " ", " ".join(prefix + [m.group(0) + rest])).strip(" ,;:()-")
-        pairs.append((name.strip(" ,;:()"), title))
-    return pairs
-
-
-def role_timeline(query: str, results: list[dict]) -> list[tuple[str, str, int]]:
-    """For role questions: (date, "Dr. X ... Dean, School of IT", source n)
-    for every named role holder in the results, newest first. Handed to the
-    LLM so it doesn't have to work out who came when by itself."""
-    words = {m.group(0).lower() for m in _TOKEN.finditer(query)}
-    roles = words & config.ROLE_TERMS
-    if not roles:
-        return []
-    role_words = set(roles)
-    for r in roles:
-        role_words.update(t for p in config.QUERY_SYNONYMS.get(r, []) for t in tokenize(p))
-    role_words &= config.ROLE_TERMS
-    seen, rows = set(), []
-    for n, chunk in enumerate(results, 1):
-        for name, title in role_holders(chunk["text"], role_words):
-            snippet = f"{name}, {title}"
-            key = (chunk.get("date"), snippet.lower())
-            if key not in seen:
-                seen.add(key)
-                rows.append((chunk.get("date") or "", snippet, n))
-    rows.sort(key=lambda r: r[0], reverse=True)
-    return rows[:12]
 
 
 def _dedupe_key(text: str) -> str:
@@ -312,22 +204,14 @@ class HybridRetriever:
     def _newest_role_mentions(self, query: str, keyword_hits_wide) -> list[int]:
         """For "who is the HOD (now)?"-type questions: the newest chunks that
         mention the role, among those matching the question at all."""
-        words = {m.group(0).lower() for m in _TOKEN.finditer(query)}
-        roles = words & config.ROLE_TERMS
-        if not roles and not (words & config.PRESENT_TERMS):
+        words = roles.role_words(query)
+        if not words:
             return []
-        role_words = set(roles)
-        for r in roles:
-            for phrase in config.QUERY_SYNONYMS.get(r, []):
-                role_words.update(tokenize(phrase))
-        role_words &= config.ROLE_TERMS
-        if not role_words:
-            return []
-        holder = _role_holder_pattern(role_words)
+        holder = roles.holder_pattern(words)
         mentions = [
             i for i, _ in keyword_hits_wide
             if self.chunks[i].get("date")
-            and role_words & self.bm25.doc_tokens[i].keys()
+            and words & self.bm25.doc_tokens[i].keys()
             and holder.search(self.chunks[i]["text"])
         ]
         mentions.sort(key=lambda i: self.chunks[i]["date"], reverse=True)

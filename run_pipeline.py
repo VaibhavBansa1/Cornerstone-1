@@ -10,7 +10,7 @@ Then query with:
 import argparse
 import logging
 
-from ingestion.extract import build_chunks, write_chunks
+from ingestion.build import build_chunks, write_chunks
 from rag.embed_index import build_index
 from rag.embeddings import resolve_device
 

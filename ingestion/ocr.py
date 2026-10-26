@@ -10,7 +10,7 @@ Engines (pick with OCR_ENGINE=auto|easyocr|rapidocr|none):
 "auto" = easyocr if a GPU is visible, else rapidocr, else easyocr on CPU,
 else OCR is skipped with a warning. Install with:  uv sync --extra ocr
 
-OCR'd text is cached (see ingestion.extract.pdf_to_text), so each page is
+OCR'd text is cached (see ingestion.readers.pdf_extract), so each page is
 only ever OCR'd once -- copy the data/ folder to another machine and it
 won't redo the work.
 """

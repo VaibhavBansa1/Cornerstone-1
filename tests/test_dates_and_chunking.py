@@ -1,7 +1,8 @@
 from datetime import date
 
 from ingestion.dates import label, latest_date
-from ingestion.extract import chunk_text, html_to_text, make_chunks
+from ingestion.chunking import chunk_text, make_chunks
+from ingestion.readers import html_to_text
 
 TODAY = date(2026, 10, 25)
 
@@ -41,7 +42,7 @@ def test_html_inline_tags_do_not_break_words():
 
 
 def test_pdf_ligatures_are_normalised():
-    from ingestion.extract import normalize_text
+    from ingestion.readers import normalize_text
 
     assert normalize_text("Certiﬁcate  of   recognition") == "Certificate of recognition"
 

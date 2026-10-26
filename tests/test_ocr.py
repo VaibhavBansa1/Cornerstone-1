@@ -21,15 +21,15 @@ def test_pdf_cache_is_reused_even_when_ocr_found_no_words(tmp_path, monkeypatch)
     import json
 
     import config
-    from ingestion import extract, ocr
+    from ingestion import ocr, readers
 
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     pdf = tmp_path / "photo.pdf"
     pdf.write_bytes(b"%PDF-fake")
-    cache = extract._pdf_cache_path(pdf)
+    cache = readers._pdf_cache_path(pdf)
     cache.parent.mkdir(parents=True)
     cache.write_text(json.dumps({"text": "", "pages": 1, "scanned_pages": 1, "ocr_pages": 0,
                                  "ocr_attempted": True, "pdf_date": None}))
     monkeypatch.setattr(ocr, "available", lambda: True)
     monkeypatch.setattr(ocr, "ocr_pdf_pages", lambda *a: (_ for _ in ()).throw(AssertionError("re-OCR'd")))
-    assert extract.pdf_extract(pdf)["ocr_attempted"] is True
+    assert readers.pdf_extract(pdf)["ocr_attempted"] is True
