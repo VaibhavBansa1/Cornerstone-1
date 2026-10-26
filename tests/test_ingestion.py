@@ -1,7 +1,9 @@
 import json
 
 import config
-from ingestion.extract import build_chunks, chunk_text, html_to_text
+from ingestion.build import build_chunks
+from ingestion.chunking import chunk_text
+from ingestion.readers import html_to_text
 
 
 def test_html_to_text_strips_script_and_nav():

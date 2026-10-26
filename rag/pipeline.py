@@ -18,8 +18,9 @@ from datetime import date
 import config
 from ingestion.dates import label as date_label
 from rag import llm
-from rag.query_understanding import Understanding, understand
-from rag.retrieval import HybridRetriever, load_retriever, role_timeline, semester_for_batch, session_start_year
+from rag.query_understanding import Understanding, semester_of, session_start_year, understand
+from rag.retrieval import HybridRetriever, load_retriever
+from rag.roles import role_timeline
 
 log = logging.getLogger("rag.pipeline")
 
@@ -35,10 +36,9 @@ def _get_retriever() -> HybridRetriever:
         return _retriever
 
 
-def _load_index():
-    """(faiss_index, chunks) -- used by the admin page to list documents."""
-    r = _get_retriever()
-    return r.index, r.chunks
+def indexed_chunks() -> list[dict]:
+    """Every chunk in the loaded index (the admin page lists documents from these)."""
+    return _get_retriever().chunks
 
 
 def reload_index():
@@ -79,7 +79,7 @@ def batch_guide(today: date | None = None) -> str:
     session = f"July-Dec {start}" if today.month >= 7 else f"Jan-June {start + 1}"
     parts = []
     for admitted in range(start, start - 4, -1):
-        sem = semester_for_batch(admitted, today)
+        sem = semester_of(admitted, today)
         if 1 <= sem <= 8:
             parts.append(f"{admitted}-{(admitted + 4) % 100:02d} batch = semester {sem}")
     return f"In the current {session} session: " + ", ".join(parts) + "."

@@ -10,7 +10,6 @@ import json
 import logging
 import time
 
-import numpy as np
 
 import config
 from ingestion.dates import label as date_label
@@ -29,11 +28,6 @@ def passage_text(chunk: dict) -> str:
         part for part in (chunk.get("title", "").strip(), date_label(chunk.get("date"))) if part
     )  # the title already includes the link label ("V SEM · 2024-28 BATCH")
     return f"{header}\n{chunk['text']}" if header else chunk["text"]
-
-
-def embed_texts(texts: list[str]) -> np.ndarray:
-    """Embed document text (kept for older callers)."""
-    return get_embedder().embed_passages(texts)
 
 
 def load_chunks() -> list[dict]:

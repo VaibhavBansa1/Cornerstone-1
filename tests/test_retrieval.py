@@ -101,7 +101,7 @@ def test_semester_numbers_match_roman_numerals():
 
 
 def test_role_timeline_lists_named_holders_newest_first():
-    from rag.retrieval import role_timeline
+    from rag.roles import role_timeline
 
     results = [
         {"text": "Editorial Board\nDr. Sanjiv Sharma, HoD IT", "date": "2024-07-01"},
@@ -117,7 +117,7 @@ def test_role_timeline_lists_named_holders_newest_first():
 
 
 def test_role_holder_pairs_the_nearest_name_not_the_first_in_a_list():
-    from rag.retrieval import role_holders
+    from rag.roles import role_holders
 
     text = "Ms. Surbhi Gupta\nMs. Nidhi Saxena\n(Dr. Punit Kumar Johari)\nDean, SoIT"
     assert role_holders(text, {"dean"}) == [("Dr. Punit Kumar Johari", "Dean, SoIT")]
@@ -125,7 +125,7 @@ def test_role_holder_pairs_the_nearest_name_not_the_first_in_a_list():
 
 
 def test_timetable_row_speaker_is_not_paired_with_a_signature_title():
-    from rag.retrieval import role_holders
+    from rag.roles import role_holders
 
     # Real layout from an induction schedule PDF: last table row, then the
     # signature title whose name wasn't extracted.
@@ -136,7 +136,7 @@ def test_timetable_row_speaker_is_not_paired_with_a_signature_title():
 
 
 def test_batch_and_semester_mapping():
-    from rag.retrieval import batch_for_semester, semester_for_batch
+    from rag.query_understanding import batch_in as batch_for_semester, semester_of as semester_for_batch
 
     oct26, mar27 = date(2026, 10, 26), date(2027, 3, 1)
     assert batch_for_semester(5, oct26) == 2024
