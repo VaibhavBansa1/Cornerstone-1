@@ -18,11 +18,12 @@ dependencies = [
 # LLM providers need no extra packages: they are all called over plain HTTP
 # with `requests` (see rag/llm/).
 #
-# GPU embeddings on an NVIDIA card:   uv sync --extra cuda
-# Plain `uv sync` installs the normal CPU build (fine for a laptop).
+# Pick ONE PyTorch build (they are alternatives, see [tool.uv] conflicts):
+#   laptop / no NVIDIA GPU:   uv sync --extra cpu --extra ocr        (~200 MB torch)
+#   NVIDIA GPU PC:            uv sync --extra cuda --extra ocr       (~2.5 GB torch)
+cpu = ["torch>=2.6", "torchvision>=0.21"]
 cuda = ["torch>=2.6", "torchvision>=0.21"]
-# Read scanned PDFs (OCR):   uv sync --extra ocr        (laptop: RapidOCR on CPU)
-#                            uv sync --extra cuda --extra ocr   (GPU PC: EasyOCR on GPU)
+# Read scanned PDFs (OCR): EasyOCR (fast on GPU) + RapidOCR (CPU fallback).
 ocr = ["easyocr>=1.7", "rapidocr-onnxruntime>=1.4", "pypdfium2>=4.30"]
 
 [dependency-groups]
@@ -30,10 +31,22 @@ dev = ["pytest>=8.0"]
 
 [tool.uv]
 package = false
+conflicts = [[{ extra = "cpu" }, { extra = "cuda" }]]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu128", extra = "cuda" }]
-torchvision = [{ index = "pytorch-cu128", extra = "cuda" }]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cuda" },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cuda" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
