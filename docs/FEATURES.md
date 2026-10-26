@@ -108,6 +108,7 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 |---|---|
 | Install on a laptop (CPU) | `uv sync --extra cpu --extra ocr` |
 | Install on the GPU PC | `uv sync --extra cuda --extra ocr` |
+| Then, in every new terminal (keeps that PyTorch build) | PowerShell `$env:UV_NO_SYNC = "1"` · bash `export UV_NO_SYNC=1` |
 | Crawl again + rebuild | `uv run run_pipeline.py` |
 | Rebuild only (after changing settings) | `uv run run_pipeline.py --skip-crawl` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |

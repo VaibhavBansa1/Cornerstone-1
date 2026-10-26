@@ -22,6 +22,8 @@ uv run run_pipeline.py              # crawl + build the index (once)
 uv run -m web.app                   # http://localhost:5000   (admin: /admin)
 ```
 
+> **Important:** plain `uv run` re-installs the *default* setup, which swaps out the PyTorch build you chose. After `uv sync --extra …`, either use `uv run --no-sync …`, or set it once per terminal: PowerShell `$env:UV_NO_SYNC = "1"`, bash `export UV_NO_SYNC=1`. The commands below assume you did.
+
 Without uv: `pip install -r requirements.txt` (generated from `uv.lock`), then use `python` instead of `uv run`.
 
 ## Choose the AI model
