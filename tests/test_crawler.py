@@ -317,3 +317,28 @@ def test_failures_are_recorded_in_manifest_not_just_logged(tmp_path, monkeypatch
     failed_by_kind = {f["kind"]: f for f in manifest.failed}
     assert failed_by_kind["asset"]["reason"] == "status 404"
     assert "interstitial" in failed_by_kind["drive"]["reason"]
+
+
+def test_college_pages_are_fetched_with_their_files_but_their_links_are_not_followed(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_PAGES_DIR", tmp_path / "raw" / "pages")
+    monkeypatch.setattr(config, "RAW_ASSETS_DIR", tmp_path / "raw" / "assets")
+    monkeypatch.setattr(config, "MANIFEST_PATH", tmp_path / "manifest.json")
+    monkeypatch.setattr(config, "REQUEST_DELAY_SECONDS", 0)
+    monkeypatch.setattr(config, "RESPECT_ROBOTS_TXT", False)
+    rules = f"https://{DOMAIN}/academics/ordinances"
+    sop = f"https://{DOMAIN}/images/sop/Exam.pdf"
+    monkeypatch.setattr(config, "COLLEGE_PAGES", [rules, sop])
+    routes = {
+        BASE: FakeResponse(text="<html><body><div id='sp-main-body'>IT home</div></body></html>"),
+        rules: FakeResponse(text=f"""<html><head><title>Ordinances</title></head><body><div id='sp-main-body'>
+            <a href="https://{DOMAIN}/images/ordinance.pdf">Ordinance</a>
+            <a href="https://{DOMAIN}/academics/some-other-page">Another page</a></div></body></html>"""),
+        f"https://{DOMAIN}/images/ordinance.pdf": FakeResponse(content=b"%PDF-1", headers={"Content-Type": "application/pdf"}),
+        sop: FakeResponse(content=b"%PDF-1", headers={"Content-Type": "application/pdf"}),
+    }
+    session = FakeSession(routes)
+    manifest = ScopedCrawler(session=session).crawl(BASE)
+    assert {p["url"] for p in manifest.pages} == {BASE, rules}
+    assert {a["url"] for a in manifest.assets} == {f"https://{DOMAIN}/images/ordinance.pdf", sop}
+    assert f"https://{DOMAIN}/academics/some-other-page" not in session.requested

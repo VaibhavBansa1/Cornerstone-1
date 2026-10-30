@@ -63,6 +63,59 @@ START_URL = f"https://{ALLOWED_DOMAIN}{ALLOWED_PATH_PREFIX}"
 # ALLOWED_PATH_PREFIX.
 DEPARTMENT_NAV_ARIA_LABEL = "Department of Information Technology"
 
+# College-wide pages (academic rules, calendar, fees, hostel, library,
+# placement...) so students can ask about the college, not only the IT
+# department. Each page is fetched together with the files (PDFs) it links
+# to, but its links are NOT followed, so the crawl never spreads over the
+# whole site. A file URL here (the rule PDFs linked only from the site's top
+# menu) is downloaded directly.
+_C = f"https://{ALLOWED_DOMAIN}"
+COLLEGE_PAGES = [
+    # about
+    f"{_C}/about-institute/about-mits", f"{_C}/about-institute/vision-mission",
+    f"{_C}/about-institute/accreditation", f"{_C}/about-institute/policies",
+    f"{_C}/about-institute/code-of-conduct-for-stakeholders", f"{_C}/index.php/contact-us",
+    # administration
+    f"{_C}/administration/director", f"{_C}/administration/registrar", f"{_C}/administration/deans",
+    f"{_C}/administration/controller-of-examination-new/coe-mits-du",
+    f"{_C}/administration/ombudsperson", f"{_C}/administration/academic-advisory-cell",
+    # academics
+    f"{_C}/academics/courses", f"{_C}/academics/courses/under-graduate",
+    f"{_C}/academics/courses/post-graduate", f"{_C}/academics/courses/ph-d",
+    f"{_C}/academics/ordinances", f"{_C}/academics/academic-calendar",
+    f"{_C}/academics/quality-initiatives/nptel-local-chapter",
+    f"{_C}/academics/quality-initiatives/mits-moocs",
+    f"{_C}/academics/quality-initiatives/mentor-mentee-scheme",
+    # student life
+    f"{_C}/life-at-mits/central-facilities/library",
+    f"{_C}/life-at-mits/central-facilities/medical-dispensary",
+    f"{_C}/life-at-mits/central-facilities/gymnesium",
+    f"{_C}/life-at-mits/central-facilities/s-e-activities",
+    f"{_C}/life-at-mits/student-activities/societies-clubs", f"{_C}/life-at-mits/student-activities/ncc",
+    f"{_C}/life-at-mits/student-activities/student-advisory-cell",
+    f"{_C}/life-at-mits/students-grievances-counselling/proctor",
+    f"{_C}/life-at-mits/students-grievances-counselling/grievance-ragging",
+    f"{_C}/life-at-mits/students-grievances-counselling/counselling-cell",
+    f"{_C}/life-at-mits/students-grievances-counselling/spoc-list",
+    f"{_C}/life-at-mits/hostels", f"{_C}/life-at-mits/anti-ragging-cell",
+    f"{_C}/life-at-mits/facilities-for-differently-abled", f"{_C}/new-sport-page/new-sport-landing-page",
+    f"{_C}/grievance-cell",
+    # admission
+    f"{_C}/admission/ug-admissions", f"{_C}/admission/pg-admissions", f"{_C}/admission/fee-structure",
+    f"{_C}/admission/faqs", f"{_C}/admission/contact",
+    # training & placement
+    f"{_C}/training-internship/about-training-internship", f"{_C}/training-internship/internship-policy",
+    f"{_C}/training-internship/leading-recruiters", f"{_C}/training-internship/placement-records",
+    f"{_C}/training-internship/contact-person",
+    # latest notices
+    f"{_C}/index.php/notifications",
+    # rule books (SOPs) linked only from the top menu
+    f"{_C}/images/sop/Examination%20SOP.pdf", f"{_C}/images/mainmenu/hostel/SoP%20Hostel.pdf",
+    f"{_C}/images/sop/Discipline%20SOP%20MITS-DU_July%202026.pdf",
+    f"{_C}/images/sop/Students%20Clubs%20SOP%20Mod%201.pdf", f"{_C}/images/sop/NEC%20SOP.pdf",
+    f"{_C}/images/sop/Sports%20SOP.pdf", f"{_C}/images/sop/SWAYAM%20NPTEL%20SOP.pdf",
+]
+
 # Link/asset discovery is restricted to this container id so site-wide
 # chrome (top mega-menu, footer widgets) is never treated as in-scope.
 MAIN_CONTENT_CONTAINER_ID = "sp-main-body"

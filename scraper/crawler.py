@@ -7,6 +7,9 @@ Design goals (per project requirements):
     inside the department's own sidebar nav (``config.DEPARTMENT_NAV_ARIA_LABEL``)
     -- this site publishes most department sub-pages as root-level slugs
     (e.g. "/syllabus-it") that share no URL prefix with the seed page.
+  * Plus a fixed list of college-wide pages (``config.COLLEGE_PAGES``:
+    rules, calendar, fees, hostel, placement...). Each is fetched with the
+    files it links to, but its links are not followed.
   * Never treat site-wide chrome (top mega-menu, footer "quick links"
     widgets) as in-scope just because it's on the same domain -- link/asset
     discovery is restricted to ``config.MAIN_CONTENT_CONTAINER_ID``.
@@ -175,6 +178,7 @@ class ScopedCrawler:
         self.visited_pages: set[str] = set()
         self.downloaded_assets: set[str] = set()
         self.in_scope_urls: set[str] = set()
+        self.no_follow: set[str] = set()  # college-wide pages: fetch, don't follow links
         self.manifest = Manifest()
         self._robots = None
         if config.RESPECT_ROBOTS_TXT:
@@ -222,8 +226,24 @@ class ScopedCrawler:
         queued: set[str] = {start_norm}
         self.in_scope_urls.add(start_norm)
 
+        # College-wide pages: queued after the department, links not followed.
+        extra_files = []
+        for url in config.COLLEGE_PAGES:
+            norm = normalize_url(url)
+            if asset_extension(norm):
+                extra_files.append(norm)
+            elif norm not in queued:
+                queued.add(norm)
+                queue.append(norm)
+                self.in_scope_urls.add(norm)
+                self.no_follow.add(norm)
+
         try:
             self._crawl_loop(queue, queued)
+            for url in extra_files:
+                if url not in self.downloaded_assets:
+                    self.downloaded_assets.add(url)
+                    self._download_asset(url, asset_extension(url), referenced_from=f"https://{config.ALLOWED_DOMAIN}/")
         except BaseException as exc:  # Ctrl+C, crash, closed terminal...
             # Keep the last COMPLETE manifest.json untouched and save what
             # this run got to a separate file, clearly marked.
@@ -322,7 +342,8 @@ class ScopedCrawler:
                     url,
                 )
 
-            self._extract_and_queue_links(main_scope, url, queue, queued)
+            if url not in self.no_follow:
+                self._extract_and_queue_links(main_scope, url, queue, queued)
             self._extract_and_download_assets(main_scope, url)
 
     def _extract_and_queue_links(self, main_scope, page_url, queue, queued):
