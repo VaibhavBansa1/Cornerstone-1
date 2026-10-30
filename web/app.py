@@ -304,8 +304,20 @@ def delete_upload(name):
     return jsonify({"deleted": name, "rebuilding": True})
 
 
+def _warm_up():
+    """Load the index and search models now, so the first student doesn't
+    wait ~20 s on "Searching..." while they load."""
+    try:
+        if pipeline.index_exists():
+            pipeline.retrieve("warm up")
+            log.info("Search models loaded.")
+    except Exception as exc:  # a problem here shows up again on the first question
+        log.warning("Warm-up failed: %s", exc)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    threading.Thread(target=_warm_up, daemon=True).start()
     port = int(os.environ.get("PORT", "5000"))
     log.info("Chat: http://localhost:%d   Admin: http://localhost:%d/admin", port, port)
     app.run(host="0.0.0.0", port=port, debug=False)
