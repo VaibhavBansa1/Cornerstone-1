@@ -31,9 +31,10 @@ REPORT = config.DATA_DIR / "eval_report.md"
 # How the bot says "I don't know" (English and Hinglish).
 UNKNOWN = re.compile(
     r"not (explicitly |specifically )?(in|mentioned|available|found|covered|listed|given|specified)"
-    r"|(do not|don't|does not|doesn't) (explicitly |specifically )?(have|contain|mention|include|cover|specify|list)"
+    r"|(do not|don't|does not|doesn't) (explicitly |specifically )?(have|contain|mention|include|cover|specify|list|give|provide)"
     r"|(no|not any) (specific |explicit )?(information|details|mention|data)"
     r"|could ?n[o']t find|cannot find|can't find|unable to find|not able to find"
+    r"|none of the (provided |available |given )?sources"
     r"|i (don't|do not) know|not sure"
     r"|(jaankari|jankari|information) nahi|nahi (hai|mili|pata)|pata nahi",
     re.I,
@@ -41,7 +42,10 @@ UNKNOWN = re.compile(
 
 
 def grade(item: dict, text: str) -> tuple[bool, str]:
-    text = text.replace("\u2019", "'").replace("\u2018", "'")  # don’t -> don't
+    # Some models write don’t, narrow spaces and non-breaking hyphens.
+    for odd, plain in (("\u2019", "'"), ("\u2018", "'"), ("\u202f", " "), ("\u00a0", " "),
+                       ("\u2009", " "), ("\u2011", "-"), ("\u2010", "-"), ("\u2013", "-")):
+        text = text.replace(odd, plain)
     def found(p):
         return re.search(p, text, re.I)
 

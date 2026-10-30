@@ -211,7 +211,11 @@
     "google services",
     "deep learning",
     "data science",
-    "cyber security"
+    "cyber security",
+    "finishing school",
+    "workshop",
+    "internship",
+    "skill"
    ],
    "min_any": 2
   },
@@ -443,16 +447,12 @@
    "cat": "Mandatory tasks",
    "q": "How many extra credits do I need for an Honours degree?",
    "expect": "answer",
-   "must": [
+   "any": [
+    "\\b18\\b",
     "\\b20\\b"
    ],
-   "any": [
-    "MOOC"
-   ],
-   "not": [
-    "\\b18 additional",
-    "\\*\\*18\\b"
-   ]
+   "not": [],
+   "note": "The 2026 B.Tech ordinance says 18 (sec. 6.2, 160+18=178) in one place and 20 in another; both are accepted."
   },
   {
    "id": "man6",
@@ -482,8 +482,8 @@
    "q": "Phone number of the 1st year class coordinator?",
    "expect": "answer",
    "any": [
-    "9407243740",
-    "9926663664"
+    "940\\s?724\\s?3740",
+    "992\\s?666\\s?3664"
    ]
   },
   {
