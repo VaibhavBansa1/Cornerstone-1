@@ -2,6 +2,7 @@
 
     python scripts/eval.py              # all questions in scripts/eval_questions.json
     python scripts/eval.py lab1 out3    # only these ids
+    python scripts/eval.py --regrade    # grade the last run again, no AI calls
 
 Each question says what a good answer must contain (or that the bot should
 say it doesn't know). Grading is simple pattern matching, so read the
@@ -40,6 +41,7 @@ UNKNOWN = re.compile(
 
 
 def grade(item: dict, text: str) -> tuple[bool, str]:
+    text = text.replace("\u2019", "'").replace("\u2018", "'")  # don’t -> don't
     def found(p):
         return re.search(p, text, re.I)
 
@@ -63,7 +65,24 @@ def grade(item: dict, text: str) -> tuple[bool, str]:
     return False, f"only {len(hits)} of {need} expected items"
 
 
+def regrade_latest():
+    """Grade the newest saved run again (after changing the expected answers
+    or the grader) without asking the AI again."""
+    questions = {q["id"]: q for q in json.loads(QUESTIONS.read_text(encoding="utf-8"))["questions"]}
+    runs = sorted(RUNS_DIR.glob("*.json"))
+    latest = json.loads(runs[-1].read_text(encoding="utf-8"))
+    for r in latest["results"]:
+        if r["id"] in questions:
+            r["pass"], r["why"] = grade(questions[r["id"]], r["answer"])
+    runs[-1].write_text(json.dumps(latest, indent=1, ensure_ascii=False), encoding="utf-8")
+    before = {r["id"]: r for r in json.loads(runs[-2].read_text(encoding="utf-8"))["results"]} if len(runs) > 1 else {}
+    write_report(latest["results"], before, latest["time"])
+    print(f"{sum(r['pass'] for r in latest['results'])}/{len(latest['results'])} passed (regraded). Report: {REPORT}")
+
+
 def main():
+    if "--regrade" in sys.argv:
+        return regrade_latest()
     data = json.loads(QUESTIONS.read_text(encoding="utf-8"))["questions"]
     only = set(sys.argv[1:])
     if only:
