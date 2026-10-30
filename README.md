@@ -41,6 +41,7 @@ Set one or more API keys. Every provider with a key is tried in order; if one fa
 | LM Studio / llama.cpp / vLLM | `OPENAI_COMPAT_BASE_URL` | `OPENAI_COMPAT_MODEL` |
 | Ollama (local, no key) | `OLLAMA_BASE_URL` | `OLLAMA_MODEL` |
 
+Easiest: copy `.env.example` to `.env` and paste your keys there (it's never uploaded to git). Or set them as environment variables.
 Pick your own order: `LLM_PROVIDERS=groq,openrouter,ollama`.
 PowerShell: `$env:GROQ_API_KEY = "gsk_..."` · bash: `export GROQ_API_KEY=gsk_...`
 

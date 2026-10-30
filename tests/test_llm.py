@@ -78,3 +78,17 @@ def test_auto_skips_providers_without_keys(monkeypatch):
 
 def test_reasoning_tags_are_removed():
     assert clean_reply("<think>hmm let me see</think>\nThe HOD is X.") == "The HOD is X."
+
+
+def test_dotenv_file_sets_missing_variables_only(tmp_path, monkeypatch):
+    import config
+
+    f = tmp_path / ".env"
+    f.write_text('# comment\nOPENROUTER_API_KEY="sk-or-test"\nGROQ_API_KEY=from-file\n', encoding="utf-8")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "from-env")
+    config._load_dotenv(f)
+    import os
+    assert os.environ["OPENROUTER_API_KEY"] == "sk-or-test"
+    assert os.environ["GROQ_API_KEY"] == "from-env"
+    monkeypatch.delenv("OPENROUTER_API_KEY")
