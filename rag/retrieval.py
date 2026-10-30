@@ -278,8 +278,9 @@ class HybridRetriever:
                understanding=None) -> list[dict]:
         n = config.CANDIDATES_PER_RETRIEVER
         extra = understanding.search_terms() if understanding is not None else []
-        keyword_query = understanding.rewrite(query) if understanding is not None else query
-        keyword_wide = self.bm25.search(expand_query(keyword_query, extra), max(n, 300))
+        if understanding is not None:  # "3rd year" -> "5th sem" for every search step
+            query = understanding.rewrite(query)
+        keyword_wide = self.bm25.search(expand_query(query, extra), max(n, 300))
         keyword_hits = keyword_wide[:n]
         vector_hits = self._vector_search(query, n)
         newest_roles = self._newest_role_mentions(query, keyword_wide)
