@@ -10,6 +10,7 @@ Verifies:
 """
 import config
 from scraper.crawler import (
+    slugify_for_filename,
     ScopedCrawler,
     extract_google_drive_file_id,
     is_in_crawl_scope,
@@ -342,3 +343,11 @@ def test_college_pages_are_fetched_with_their_files_but_their_links_are_not_foll
     assert {p["url"] for p in manifest.pages} == {BASE, rules}
     assert {a["url"] for a in manifest.assets} == {f"https://{DOMAIN}/images/ordinance.pdf", sop}
     assert f"https://{DOMAIN}/academics/some-other-page" not in session.requested
+
+
+def test_long_file_names_are_shortened_but_stay_unique():
+    base = "https://web.mitsgwalior.in/images/fee%20structure/" + "Notice%20Fee%20Structure%20" * 12
+    a, b = slugify_for_filename(base + "A.pdf"), slugify_for_filename(base + "B.pdf")
+    assert len(a) < 120 and a != b
+    assert a.endswith(a.split("__")[-1]) and "A.pdf" in a
+    assert slugify_for_filename("https://web.mitsgwalior.in/syllabus-it").startswith("syllabus-it__")
