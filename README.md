@@ -1,9 +1,10 @@
-# MITS IT Help Desk
+# MITS Help Desk
 
-A chatbot that answers questions about the **IT department of MITS Gwalior**, using only the department's own website and documents, and shows the source of every answer.
+A chatbot that answers students' questions about **MITS Gwalior**, using only the college's own website and documents, and shows the source of every answer. It covers the **IT department in full** (every page and every PDF it links to, scanned ones included) plus the main **college-wide pages** (rules and ordinances, academic calendar, exams, fees, admissions, hostels, library, student cells, placement, notices). It's an MVP built for one department; other departments are added the same way.
 
-It crawls the IT department pages and every PDF they link to, reads them (scanned pages included), gives every piece of text a date, and answers questions with a hybrid search and an AI model of your choice.
+It reads every page and PDF, gives every piece of text a date, and answers with a hybrid search and an AI model of your choice. One session, no login, nothing stored: reload and the chat is gone.
 
+- **Which doc to read for what:** [docs/README.md](docs/README.md)
 - **How it works, with diagrams and every design decision:** [docs/architecture/architecture.md](docs/architecture/architecture.md)
 - **Each feature in plain words (why / what / where):** [docs/FEATURES.md](docs/FEATURES.md)
 
@@ -63,7 +64,7 @@ More checking tools (crawl, links, retrieval debugging, batch answers) are liste
 
 ## Does it answer correctly?
 
-55 test questions (labs, School vs department, schemes, things not on the IT site, "where is…", mandatory tasks, contacts, timetables, typos) are graded with `uv run scripts/eval.py`. On 30 Oct 2026 with the local Ollama model: **43/55 before this round of fixes, 54/55 after.** Details and the per-group table: [docs/FEATURES.md](docs/FEATURES.md#13-55-test-questions-graded-automatically).
+55 test questions (labs, School vs department, schemes, things not on the IT site, "where is…", mandatory tasks, contacts, timetables, typos) are graded with `uv run scripts/eval.py`. On 30 Oct 2026 with the local Ollama model: **43/55 before this round of fixes, 54/55 after.** Details and the per-group table: [docs/FEATURES.md](docs/FEATURES.md#14-55-test-questions-graded-automatically).
 
 ## Settings
 
@@ -71,6 +72,6 @@ Every setting is in `config.py` and can be overridden with an environment variab
 
 ## Scope and privacy
 
-- The crawler only contacts `web.mitsgwalior.in`, follows only IT department pages, visits each URL once, and respects `robots.txt`.
+- The crawler only contacts `web.mitsgwalior.in`: it follows the IT department's pages, fetches a fixed list of college-wide pages without following their links, visits each URL once, and respects `robots.txt`.
 - Question and answer text is **never stored**: the log keeps only counts and which sources were cited.
 - `data/` (crawl, index, log) is not in git; `run_pipeline.py` rebuilds it.
