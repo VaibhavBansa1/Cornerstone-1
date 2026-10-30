@@ -197,3 +197,9 @@ def test_generic_link_text_is_replaced_by_the_file_name():
     assert sources.source_label(chunk) == "Student Notices · op schedule.pdf"
     chunk["link_label"] = "V SEM · 2024-28 BATCH"
     assert sources.source_label(chunk) == "Student Notices · V SEM · 2024-28 BATCH"
+
+
+def test_answer_that_cites_nothing_marks_no_source_as_used(client, monkeypatch):
+    monkeypatch.setattr(pipeline, "answer", _fake_answer("groq", "I don't have information about a mess."))
+    data = client.post("/api/query", json={"question": "Is there a mess?"}).get_json()
+    assert data["generated"] is True and data["cited"] == []

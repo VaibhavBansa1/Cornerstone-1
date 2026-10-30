@@ -133,7 +133,9 @@ def _answer_payload(result: dict, elapsed_ms: int) -> dict:
     # instead; the UI then shows those passages.
     generated = result.get("generated", result["provider"] != "none")
     numbers = cited_numbers(result["answer"]) if generated else set()
-    cited = [s for s in sources if s["n"] in numbers] or sources[:1]
+    # An answer that cites nothing (e.g. "I don't have that") shows no
+    # source as "used"; passages-only mode highlights the best passage.
+    cited = [s for s in sources if s["n"] in numbers] if generated else sources[:1]
     chatlog.log_question(cited, result["provider"], elapsed_ms)  # question text is never stored
     return {
         "answer": result["answer"] if generated else None,
