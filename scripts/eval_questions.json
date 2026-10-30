@@ -1,110 +1,578 @@
 {
-  "_how": "expect = answer | unknown | either. must = every pattern must appear; any = at least min_any of these must appear (default 1); not = none may appear. Patterns are case-insensitive regex. Facts checked against data/processed/chunks.jsonl (Oct 2026 crawl).",
-  "questions": [
-    {"id": "lab1", "cat": "Labs", "q": "I am a new student, what are all the labs in the IT department?", "expect": "answer",
-     "any": ["data science lab", "programming lab", "computing lab", "project lab", "microprocessor", "research lab"], "min_any": 4},
-    {"id": "lab2", "cat": "Labs", "q": "Which lab subjects (practicals) do we have in 5th semester?", "expect": "answer",
-     "must": ["lab"]},
-    {"id": "lab3", "cat": "Labs", "q": "Is there a microprocessor lab?", "expect": "answer",
-     "must": ["microprocessor"], "any": ["8086", "8051", "hardware"]},
-    {"id": "lab4", "cat": "Labs", "q": "Where can I practice Python and R programming?", "expect": "answer",
-     "must": ["data science lab"]},
-    {"id": "lab5", "cat": "Labs", "q": "labs kitne hai IT me?", "expect": "answer",
-     "any": ["data science", "programming lab", "computing lab", "project lab", "microprocessor", "research lab"], "min_any": 4},
-    {"id": "lab6", "cat": "Labs", "q": "What is done in the Research Lab?", "expect": "answer",
-     "any": ["innovation", "experimentation", "cybersecurity", "artificial intelligence", "data science"], "min_any": 2},
-
-    {"id": "sch1", "cat": "School / department name", "q": "Is IT a department or a school now?", "expect": "answer",
-     "must": ["school of (information technology|it)"]},
-    {"id": "sch2", "cat": "School / department name", "q": "Who is the dean of School of IT?", "expect": "answer",
-     "must": ["johari"]},
-    {"id": "sch3", "cat": "School / department name", "q": "Who is the HOD of IT department?", "expect": "answer",
-     "must": ["johari"]},
-    {"id": "sch4", "cat": "School / department name", "q": "What programmes does the School of IT offer?", "expect": "answer",
-     "must": ["b\\.? ?tech", "m\\.? ?tech"], "any": ["ph\\.? ?d"]},
-    {"id": "sch5", "cat": "School / department name", "q": "What is the intake of M.Tech IT?", "expect": "answer",
-     "must": ["\\b18\\b"]},
-    {"id": "sch6", "cat": "School / department name", "q": "Is MITS a deemed university?", "expect": "answer",
-     "must": ["deemed"], "not": ["\\bnot a deemed\\b", "\\bis not deemed\\b"]},
-
-    {"id": "scm1", "cat": "Schemes", "q": "What are the schemes under IT department?", "expect": "answer",
-     "any": ["course structure", "flexible scheme", "credit", "batch", "SIP", "novel engaging", "MMTLP"], "min_any": 2,
-     "not": ["scholarship", "pradhan mantri", "government scheme"]},
-    {"id": "scm2", "cat": "Schemes", "q": "Show me the scheme for the 2024 batch", "expect": "answer",
-     "must": ["2024"]},
-    {"id": "scm3", "cat": "Schemes", "q": "What is MMTLP?", "expect": "answer",
-     "must": ["multiple mode"]},
-    {"id": "scm4", "cat": "Schemes", "q": "What are the Novel Engaging Courses?", "expect": "answer",
-     "any": ["digital learning", "IT tools", "financial markets", "computational thinking", "smart home", "excel", "know your country"], "min_any": 3},
-    {"id": "scm5", "cat": "Schemes", "q": "What is the Skill Enhancement Programme or finishing school?", "expect": "answer",
-     "any": ["google services", "deep learning", "data science", "cyber security"], "min_any": 2},
-    {"id": "scm6", "cat": "Schemes", "q": "Are there any government scholarships for IT students?", "expect": "unknown"},
-
-    {"id": "out1", "cat": "Not on the IT website", "q": "Is there a mess inside college?", "expect": "unknown"},
-    {"id": "out2", "cat": "Not on the IT website", "q": "Is there a canteen in the college?", "expect": "unknown"},
-    {"id": "out3", "cat": "Not on the IT website", "q": "What is the hostel fee?", "expect": "unknown",
-     "not": ["rs\\.? ?\\d{4,}", "₹ ?\\d{4,}", "\\b\\d{2,3},\\d{3}\\b"]},
-    {"id": "out4", "cat": "Not on the IT website", "q": "What is the B.Tech fee per year?", "expect": "unknown",
-     "not": ["rs\\.? ?\\d{4,}", "₹ ?\\d{4,}", "\\b\\d{2,3},\\d{3}\\b"]},
-    {"id": "out5", "cat": "Not on the IT website", "q": "How do I reach MITS from Gwalior railway station?", "expect": "unknown"},
-    {"id": "out6", "cat": "Not on the IT website", "q": "What are the college bus timings?", "expect": "unknown"},
-    {"id": "out7", "cat": "Not on the IT website", "q": "What is the JEE cutoff rank for IT admission?", "expect": "unknown"},
-    {"id": "out8", "cat": "Not on the IT website", "q": "Who is the HOD of the CSE department?", "expect": "unknown"},
-    {"id": "out9", "cat": "Not on the IT website", "q": "What are the library timings?", "expect": "unknown"},
-    {"id": "out10", "cat": "Not on the IT website", "q": "Who won the IPL this year?", "expect": "unknown"},
-    {"id": "out11", "cat": "Not on the IT website", "q": "canteen me kya kya milta hai?", "expect": "unknown"},
-
-    {"id": "loc1", "cat": "Where is ...", "q": "Where is the IT department located?", "expect": "either"},
-    {"id": "loc2", "cat": "Where is ...", "q": "Where is the Data Science lab?", "expect": "either"},
-    {"id": "loc3", "cat": "Where is ...", "q": "In which room is the 5th semester class held?", "expect": "either"},
-    {"id": "loc4", "cat": "Where is ...", "q": "Where was the induction program for the 2026 batch held?", "expect": "answer",
-     "any": ["venue", "hall", "room", "auditorium", "lab"]},
-    {"id": "loc5", "cat": "Where is ...", "q": "Where is the HOD's cabin?", "expect": "unknown"},
-
-    {"id": "man1", "cat": "Mandatory tasks", "q": "What are the mandatory tasks for this semester?", "expect": "either",
-     "any": ["workshop", "SIP", "internship", "NEC", "novel engaging", "proficiency", "project", "MOOC", "audit"]},
-    {"id": "man2", "cat": "Mandatory tasks", "q": "What is mandatory in 5th semester for the 2024 batch?", "expect": "answer",
-     "any": ["workshop", "SIP", "internship", "NEC", "novel engaging", "proficiency", "project", "MOOC", "audit"], "min_any": 2},
-    {"id": "man3", "cat": "Mandatory tasks", "q": "Are workshops mandatory every semester?", "expect": "answer",
-     "must": ["workshop"], "any": ["two days", "2 days", "each semester", "every semester", "mandatory"]},
-    {"id": "man4", "cat": "Mandatory tasks", "q": "What is SIP?", "expect": "answer",
-     "must": ["internship"]},
-    {"id": "man5", "cat": "Mandatory tasks", "q": "How many extra credits do I need for an Honours degree?", "expect": "answer",
-     "must": ["\\b20\\b"], "any": ["MOOC"]},
-    {"id": "man6", "cat": "Mandatory tasks", "q": "Can I do a minor specialization?", "expect": "answer",
-     "must": ["minor"], "any": ["\\b20\\b", "MOOC"]},
-
-    {"id": "ppl1", "cat": "People and contacts", "q": "Who is the class coordinator of 3rd year?", "expect": "answer",
-     "must": ["sejwar"]},
-    {"id": "ppl2", "cat": "People and contacts", "q": "Phone number of the 1st year class coordinator?", "expect": "answer",
-     "any": ["9407243740", "9926663664"]},
-    {"id": "ppl3", "cat": "People and contacts", "q": "Who is the time table coordinator?", "expect": "answer",
-     "must": ["sejwar"]},
-    {"id": "ppl4", "cat": "People and contacts", "q": "Which industry expert covers DBMS?", "expect": "answer",
-     "must": ["alok gupta"]},
-    {"id": "ppl5", "cat": "People and contacts", "q": "hod sir ka naam kya hai", "expect": "answer",
-     "must": ["johari"]},
-
-    {"id": "aca1", "cat": "Syllabus, timetable, notices", "q": "fifth semester syllabus 2026 subjects", "expect": "answer",
-     "must": ["16\\d{6}"]},
-    {"id": "aca2", "cat": "Syllabus, timetable, notices", "q": "3rd year ka time table kya hai?", "expect": "answer",
-     "any": ["time ?table", "monday", "\\bmon\\b", "period", "9[:.]\\d\\d|10[:.]\\d\\d"]},
-    {"id": "aca3", "cat": "Syllabus, timetable, notices", "q": "Am I debarred from the exam?", "expect": "either",
-     "any": ["debarred", "list", "notice"], "not": ["you are debarred", "you are not debarred"]},
-    {"id": "aca4", "cat": "Syllabus, timetable, notices", "q": "What is the vision of the IT department?", "expect": "answer",
-     "must": ["competent it professionals"]},
-    {"id": "aca5", "cat": "Syllabus, timetable, notices", "q": "I'm in 2nd year, what should I study this semester?", "expect": "answer",
-     "any": ["3rd|third|III", "2025"]},
-    {"id": "aca6", "cat": "Syllabus, timetable, notices", "q": "What happened in KAVACH 2023?", "expect": "answer",
-     "must": ["kavach"]},
-
-    {"id": "vag1", "cat": "Vague / typos", "q": "labs??", "expect": "answer",
-     "any": ["data science", "programming lab", "computing lab", "microprocessor", "research lab", "project lab"], "min_any": 2},
-    {"id": "vag2", "cat": "Vague / typos", "q": "tell me evrything about it dept", "expect": "answer",
-     "any": ["vision", "b\\.? ?tech", "m\\.? ?tech", "lab", "mission"], "min_any": 2},
-    {"id": "vag3", "cat": "Vague / typos", "q": "syllabus of 5th sem plz", "expect": "answer",
-     "must": ["16\\d{6}|syllabus"]},
-    {"id": "vag4", "cat": "Vague / typos", "q": "who is hod", "expect": "answer",
-     "must": ["johari"]}
-  ]
+ "_how": "expect = answer | unknown | either. must = every pattern must appear; any = at least min_any of these must appear (default 1); not = none may appear. Patterns are case-insensitive regex. Facts checked against data/processed/chunks.jsonl (Oct 2026 crawl).",
+ "questions": [
+  {
+   "id": "lab1",
+   "cat": "Labs",
+   "q": "I am a new student, what are all the labs in the IT department?",
+   "expect": "answer",
+   "any": [
+    "data science lab",
+    "programming lab",
+    "computing lab",
+    "project lab",
+    "microprocessor",
+    "research lab"
+   ],
+   "min_any": 4
+  },
+  {
+   "id": "lab2",
+   "cat": "Labs",
+   "q": "Which lab subjects (practicals) do we have in 5th semester?",
+   "expect": "answer",
+   "must": [
+    "lab"
+   ]
+  },
+  {
+   "id": "lab3",
+   "cat": "Labs",
+   "q": "Is there a microprocessor lab?",
+   "expect": "answer",
+   "must": [
+    "microprocessor"
+   ],
+   "any": [
+    "8086",
+    "8051",
+    "hardware"
+   ]
+  },
+  {
+   "id": "lab4",
+   "cat": "Labs",
+   "q": "Where can I practice Python and R programming?",
+   "expect": "answer",
+   "must": [
+    "data science lab"
+   ]
+  },
+  {
+   "id": "lab5",
+   "cat": "Labs",
+   "q": "labs kitne hai IT me?",
+   "expect": "answer",
+   "any": [
+    "data science",
+    "programming lab",
+    "computing lab",
+    "project lab",
+    "microprocessor",
+    "research lab"
+   ],
+   "min_any": 4
+  },
+  {
+   "id": "lab6",
+   "cat": "Labs",
+   "q": "What is done in the Research Lab?",
+   "expect": "answer",
+   "any": [
+    "innovation",
+    "experimentation",
+    "cybersecurity",
+    "artificial intelligence",
+    "data science"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "sch1",
+   "cat": "School / department name",
+   "q": "Is IT a department or a school now?",
+   "expect": "answer",
+   "must": [
+    "school of (information technology|it)"
+   ]
+  },
+  {
+   "id": "sch2",
+   "cat": "School / department name",
+   "q": "Who is the dean of School of IT?",
+   "expect": "answer",
+   "must": [
+    "johari"
+   ]
+  },
+  {
+   "id": "sch3",
+   "cat": "School / department name",
+   "q": "Who is the HOD of IT department?",
+   "expect": "answer",
+   "must": [
+    "johari"
+   ]
+  },
+  {
+   "id": "sch4",
+   "cat": "School / department name",
+   "q": "What programmes does the School of IT offer?",
+   "expect": "answer",
+   "must": [
+    "b\\.? ?tech",
+    "m\\.? ?tech"
+   ],
+   "any": [
+    "ph\\.? ?d"
+   ]
+  },
+  {
+   "id": "sch5",
+   "cat": "School / department name",
+   "q": "What is the intake of M.Tech IT?",
+   "expect": "answer",
+   "must": [
+    "\\b18\\b"
+   ]
+  },
+  {
+   "id": "sch6",
+   "cat": "School / department name",
+   "q": "Is MITS a deemed university?",
+   "expect": "answer",
+   "must": [
+    "deemed"
+   ],
+   "not": [
+    "\\bnot a deemed\\b",
+    "\\bis not deemed\\b"
+   ]
+  },
+  {
+   "id": "scm1",
+   "cat": "Schemes",
+   "q": "What are the schemes under IT department?",
+   "expect": "answer",
+   "any": [
+    "course structure",
+    "flexible scheme",
+    "credit",
+    "SIP",
+    "novel engaging",
+    "MMTLP",
+    "honours",
+    "finishing school",
+    "MOOC",
+    "minor"
+   ],
+   "min_any": 2,
+   "not": [
+    "scholarship",
+    "pradhan mantri",
+    "government scheme"
+   ]
+  },
+  {
+   "id": "scm2",
+   "cat": "Schemes",
+   "q": "Show me the scheme for the 2024 batch",
+   "expect": "answer",
+   "must": [
+    "2024"
+   ]
+  },
+  {
+   "id": "scm3",
+   "cat": "Schemes",
+   "q": "What is MMTLP?",
+   "expect": "answer",
+   "must": [
+    "multiple mode"
+   ]
+  },
+  {
+   "id": "scm4",
+   "cat": "Schemes",
+   "q": "What are the Novel Engaging Courses?",
+   "expect": "answer",
+   "any": [
+    "digital learning",
+    "IT tools",
+    "financial markets",
+    "computational thinking",
+    "smart home",
+    "excel",
+    "know your country"
+   ],
+   "min_any": 3
+  },
+  {
+   "id": "scm5",
+   "cat": "Schemes",
+   "q": "What is the Skill Enhancement Programme or finishing school?",
+   "expect": "answer",
+   "any": [
+    "google services",
+    "deep learning",
+    "data science",
+    "cyber security"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "scm6",
+   "cat": "Schemes",
+   "q": "Are there any government scholarships for IT students?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out1",
+   "cat": "Not on the IT website",
+   "q": "Is there a mess inside college?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out2",
+   "cat": "Not on the IT website",
+   "q": "Is there a canteen in the college?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out3",
+   "cat": "Not on the IT website",
+   "q": "What is the hostel fee?",
+   "expect": "unknown",
+   "not": [
+    "rs\\.? ?\\d{4,}",
+    "₹ ?\\d{4,}",
+    "\\b\\d{2,3},\\d{3}\\b"
+   ]
+  },
+  {
+   "id": "out4",
+   "cat": "Not on the IT website",
+   "q": "What is the B.Tech fee per year?",
+   "expect": "unknown",
+   "not": [
+    "rs\\.? ?\\d{4,}",
+    "₹ ?\\d{4,}",
+    "\\b\\d{2,3},\\d{3}\\b"
+   ]
+  },
+  {
+   "id": "out5",
+   "cat": "Not on the IT website",
+   "q": "How do I reach MITS from Gwalior railway station?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out6",
+   "cat": "Not on the IT website",
+   "q": "What are the college bus timings?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out7",
+   "cat": "Not on the IT website",
+   "q": "What is the JEE cutoff rank for IT admission?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out8",
+   "cat": "Not on the IT website",
+   "q": "Who is the HOD of the CSE department?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out9",
+   "cat": "Not on the IT website",
+   "q": "What are the library timings?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out10",
+   "cat": "Not on the IT website",
+   "q": "Who won the IPL this year?",
+   "expect": "unknown"
+  },
+  {
+   "id": "out11",
+   "cat": "Not on the IT website",
+   "q": "canteen me kya kya milta hai?",
+   "expect": "unknown"
+  },
+  {
+   "id": "loc1",
+   "cat": "Where is ...",
+   "q": "Where is the IT department located?",
+   "expect": "either"
+  },
+  {
+   "id": "loc2",
+   "cat": "Where is ...",
+   "q": "Where is the Data Science lab?",
+   "expect": "either"
+  },
+  {
+   "id": "loc3",
+   "cat": "Where is ...",
+   "q": "In which room is the 5th semester class held?",
+   "expect": "either"
+  },
+  {
+   "id": "loc4",
+   "cat": "Where is ...",
+   "q": "Where was the induction program for the 2026 batch held?",
+   "expect": "answer",
+   "any": [
+    "venue",
+    "hall",
+    "room",
+    "auditorium",
+    "lab"
+   ]
+  },
+  {
+   "id": "loc5",
+   "cat": "Where is ...",
+   "q": "Where is the HOD's cabin?",
+   "expect": "unknown"
+  },
+  {
+   "id": "man1",
+   "cat": "Mandatory tasks",
+   "q": "What are the mandatory tasks for this semester?",
+   "expect": "either",
+   "any": [
+    "workshop",
+    "SIP",
+    "internship",
+    "NEC",
+    "novel engaging",
+    "proficiency",
+    "project",
+    "MOOC",
+    "audit"
+   ]
+  },
+  {
+   "id": "man2",
+   "cat": "Mandatory tasks",
+   "q": "What is mandatory in 5th semester for the 2024 batch?",
+   "expect": "answer",
+   "any": [
+    "workshop",
+    "SIP",
+    "internship",
+    "NEC",
+    "novel engaging",
+    "proficiency",
+    "project",
+    "MOOC",
+    "audit"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "man3",
+   "cat": "Mandatory tasks",
+   "q": "Are workshops mandatory every semester?",
+   "expect": "answer",
+   "must": [
+    "workshop"
+   ],
+   "any": [
+    "two days",
+    "2 days",
+    "each semester",
+    "every semester",
+    "mandatory"
+   ]
+  },
+  {
+   "id": "man4",
+   "cat": "Mandatory tasks",
+   "q": "What is SIP?",
+   "expect": "answer",
+   "must": [
+    "internship"
+   ]
+  },
+  {
+   "id": "man5",
+   "cat": "Mandatory tasks",
+   "q": "How many extra credits do I need for an Honours degree?",
+   "expect": "answer",
+   "must": [
+    "\\b20\\b"
+   ],
+   "any": [
+    "MOOC"
+   ]
+  },
+  {
+   "id": "man6",
+   "cat": "Mandatory tasks",
+   "q": "Can I do a minor specialization?",
+   "expect": "answer",
+   "must": [
+    "minor"
+   ],
+   "any": [
+    "\\b20\\b",
+    "MOOC"
+   ]
+  },
+  {
+   "id": "ppl1",
+   "cat": "People and contacts",
+   "q": "Who is the class coordinator of 3rd year?",
+   "expect": "answer",
+   "must": [
+    "sejwar"
+   ]
+  },
+  {
+   "id": "ppl2",
+   "cat": "People and contacts",
+   "q": "Phone number of the 1st year class coordinator?",
+   "expect": "answer",
+   "any": [
+    "9407243740",
+    "9926663664"
+   ]
+  },
+  {
+   "id": "ppl3",
+   "cat": "People and contacts",
+   "q": "Who is the time table coordinator?",
+   "expect": "answer",
+   "must": [
+    "sejwar"
+   ]
+  },
+  {
+   "id": "ppl4",
+   "cat": "People and contacts",
+   "q": "Which industry expert covers DBMS?",
+   "expect": "answer",
+   "must": [
+    "alok gupta"
+   ]
+  },
+  {
+   "id": "ppl5",
+   "cat": "People and contacts",
+   "q": "hod sir ka naam kya hai",
+   "expect": "answer",
+   "must": [
+    "johari"
+   ]
+  },
+  {
+   "id": "aca1",
+   "cat": "Syllabus, timetable, notices",
+   "q": "fifth semester syllabus 2026 subjects",
+   "expect": "answer",
+   "must": [
+    "16\\d{6}"
+   ]
+  },
+  {
+   "id": "aca2",
+   "cat": "Syllabus, timetable, notices",
+   "q": "3rd year ka time table kya hai?",
+   "expect": "answer",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed"
+   ]
+  },
+  {
+   "id": "aca3",
+   "cat": "Syllabus, timetable, notices",
+   "q": "Am I debarred from the exam?",
+   "expect": "either",
+   "any": [
+    "debarred",
+    "list",
+    "notice"
+   ],
+   "not": [
+    "(?<!if )(?<!whether )you are (not )?debarred"
+   ]
+  },
+  {
+   "id": "aca4",
+   "cat": "Syllabus, timetable, notices",
+   "q": "What is the vision of the IT department?",
+   "expect": "answer",
+   "must": [
+    "competent it professionals"
+   ]
+  },
+  {
+   "id": "aca5",
+   "cat": "Syllabus, timetable, notices",
+   "q": "I'm in 2nd year, what should I study this semester?",
+   "expect": "answer",
+   "any": [
+    "3rd|third|III",
+    "2025"
+   ]
+  },
+  {
+   "id": "aca6",
+   "cat": "Syllabus, timetable, notices",
+   "q": "What happened in KAVACH 2023?",
+   "expect": "answer",
+   "must": [
+    "kavach"
+   ]
+  },
+  {
+   "id": "vag1",
+   "cat": "Vague / typos",
+   "q": "labs??",
+   "expect": "answer",
+   "any": [
+    "data science",
+    "programming lab",
+    "computing lab",
+    "microprocessor",
+    "research lab",
+    "project lab"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "vag2",
+   "cat": "Vague / typos",
+   "q": "tell me evrything about it dept",
+   "expect": "answer",
+   "any": [
+    "vision",
+    "b\\.? ?tech",
+    "m\\.? ?tech",
+    "lab",
+    "mission"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "vag3",
+   "cat": "Vague / typos",
+   "q": "syllabus of 5th sem plz",
+   "expect": "answer",
+   "must": [
+    "16\\d{6}|syllabus"
+   ]
+  },
+  {
+   "id": "vag4",
+   "cat": "Vague / typos",
+   "q": "who is hod",
+   "expect": "answer",
+   "must": [
+    "johari"
+   ]
+  }
+ ]
 }
