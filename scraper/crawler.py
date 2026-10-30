@@ -106,9 +106,14 @@ def asset_extension(url: str) -> str | None:
     return None
 
 
+MAX_SLUG_CHARS = 100  # Windows paths break past 260 characters
+
+
 def slugify_for_filename(url: str) -> str:
     parsed = urlparse(url)
     slug = (parsed.path.strip("/") or "index").replace("/", "__")
+    if len(slug) > MAX_SLUG_CHARS:  # keep the start and the file name at the end
+        slug = slug[:30] + "~" + slug[-(MAX_SLUG_CHARS - 31):]
     digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
     return f"{slug}__{digest}"
 
