@@ -53,6 +53,11 @@ TOPICS = {
     "exam": ("exam", "exams", "evaluation", "major", "minor", "mid sem", "midsem", "test", "paper"),
     "result": ("result", "results", "marks", "grade", "sgpa", "cgpa"),
     "faculty": ("faculty", "teacher", "teachers", "professor", "hod", "dean", "coordinator", "head"),
+    "labs": ("lab", "labs", "laboratory", "laboratories"),
+    "contacts": ("contact", "contacts", "phone", "mobile", "email", "e-mail"),
+    "programmes": ("programmes", "programs offered", "intake", "degrees"),
+    "overview": ("everything", "overview", "introduction", "about the department", "about the school",
+                 "about it dept", "about it department", "about the it", "about dept"),
 }
 
 
@@ -91,6 +96,7 @@ class Understanding:
     session: str | None = None         # "July-Dec 2026"
     topic: str | None = None           # syllabus / timetable / exam / result / faculty
     notes: list[str] = field(default_factory=list)  # how each fact was worked out
+    year_phrase: str | None = None     # "3rd year", replaced by "5th sem" for keyword search
 
     @property
     def batch_label(self) -> str | None:
@@ -121,6 +127,13 @@ class Understanding:
         if self.semester:
             terms += [str(self.semester), ORDINAL[self.semester], ROMAN_BY_NUM[self.semester].lower(), "sem"]
         return terms
+
+    def rewrite(self, question: str) -> str:
+        """The question with "3rd year" replaced by "5th sem", so keyword
+        search doesn't match the 3rd *semester* timetable."""
+        if self.year_phrase and self.semester:
+            return question.replace(self.year_phrase, f"{ORDINAL[self.semester]} sem")
+        return question
 
     def label_matches(self, label: str) -> int:
         """+1: a document filed under this batch (and semester, if known);
@@ -159,6 +172,7 @@ def understand(question: str, today: date | None = None) -> Understanding:
             if yr:
                 # "3rd year" = sem 5 in July-Dec, sem 6 in Jan-June
                 u.semester = 2 * yr - (1 if today.month >= 7 else 0)
+                u.year_phrase = y.group(0)
                 u.notes.append(f"year {yr} of study = semester {u.semester} right now")
 
     years = [int(x) for x in _YEAR.findall(question)]

@@ -24,6 +24,9 @@ How it works, step by step:
 8. **Batch pass** -- when query understanding worked out a batch/semester
    (rag/query_understanding.py), documents filed under it ("V SEM · 2024-28
    BATCH") get a bonus and are always included; other batches' get a penalty.
+9. **Topic page** -- questions about labs, contacts, programmes or the
+   department in general always include that website page
+   (``config.TOPIC_PAGES``).
 
 BM25, the reranker and the retriever are separate classes, so any of them
 can be replaced (e.g. a different reranker) without touching the others.
@@ -250,11 +253,33 @@ class HybridRetriever:
                 break
         return picked
 
+    def _topic_page(self, understanding) -> dict | None:
+        """The whole website page for the question's topic ("labs" -> the
+        Laboratories page) as ONE source, see config.TOPIC_PAGES. These
+        pages are short, and a list (all labs) is only useful complete."""
+        page = config.TOPIC_PAGES.get(getattr(understanding, "topic", None) or "")
+        if not page:
+            return None
+        parts = [c for c in self.chunks if c.get("title") == f"{page} - MITS Gwalior" and c.get("chunk_index", 0) >= 0]
+        if not parts:
+            return None
+        parts.sort(key=lambda c: c.get("chunk_index", 0))
+        text = parts[0]["text"]
+        for c in parts[1:]:  # chunks overlap: skip the repeated start
+            nxt = c["text"]
+            cut = next((k for k in range(min(len(text), len(nxt), 400), 20, -1) if text.endswith(nxt[:k])), 0)
+            text += "\n" + nxt[cut:]
+        merged = dict(parts[0], text=text, relevance=1.0, recency_bonus=0.0, batch_bonus=0.0,
+                      newest_role_mention=False, topic_page=True)
+        merged["score"] = 1.0
+        return merged
+
     def search(self, query: str, top_k: int = config.TOP_K, today: date | None = None,
                understanding=None) -> list[dict]:
         n = config.CANDIDATES_PER_RETRIEVER
         extra = understanding.search_terms() if understanding is not None else []
-        keyword_wide = self.bm25.search(expand_query(query, extra), max(n, 300))
+        keyword_query = understanding.rewrite(query) if understanding is not None else query
+        keyword_wide = self.bm25.search(expand_query(keyword_query, extra), max(n, 300))
         keyword_hits = keyword_wide[:n]
         vector_hits = self._vector_search(query, n)
         newest_roles = self._newest_role_mentions(query, keyword_wide)
@@ -324,6 +349,10 @@ class HybridRetriever:
             per_source[c["source_url"]] += 1
             results.append(c)
         results.sort(key=lambda c: c["score"], reverse=True)
+
+        page = self._topic_page(understanding)
+        if page is not None:  # the whole topic page replaces its pieces
+            results = [page] + [c for c in results if c["source_url"] != page["source_url"]][:top_k - 1]
         return results
 
 
