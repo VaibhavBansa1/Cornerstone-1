@@ -1,17 +1,17 @@
-// System architecture of the MITS IT Help Desk.
+// System architecture of the MITS Help Desk.
 // Render:  dot -Tpng -Gdpi=150 architecture.dot -o architecture.png
 // Read it as three columns: INDEXING (left, offline) fills data/ (middle),
 // ANSWERING (right, live) reads data/. [Dn] = decision, see architecture.md.
 digraph architecture {
   graph [rankdir=TB, fontname="DejaVu Sans", nodesep=0.55, ranksep=0.42, pad=0.35,
          newrank=true, splines=true, bgcolor="white", labelloc=t, fontsize=17,
-         label=<<B>MITS IT Help Desk — system architecture</B><BR/><FONT POINT-SIZE="10">Solid box = our code (file in grey) · Double box = outside system · Dashed = stored data · [Dn] = design decision (see architecture.md)</FONT><BR/> >];
+         label=<<B>MITS Help Desk — system architecture</B><BR/><FONT POINT-SIZE="10">Solid box = our code (file in grey) · Double box = outside system · Dashed = stored data · [Dn] = design decision (see architecture.md)</FONT><BR/> >];
   node  [shape=box, fontname="DejaVu Sans", fontsize=11, color=black, penwidth=1.3,
          style=filled, fillcolor=white, margin="0.15,0.08", width=3.3];
   edge  [fontname="DejaVu Sans", fontsize=9, color=black, arrowsize=0.7];
 
   // ---------- outside systems ----------
-  site      [peripheries=2, label=<<B>MITS website</B><BR/><FONT POINT-SIZE="9">web.mitsgwalior.in — IT dept pages<BR/>+ linked PDFs / Google Drive files</FONT>>];
+  site      [peripheries=2, label=<<B>MITS website</B><BR/><FONT POINT-SIZE="9">web.mitsgwalior.in — all IT dept pages<BR/>+ ~55 college-wide pages<BR/>+ linked PDFs / Google Drive files</FONT>>];
   browser   [peripheries=2, label=<<B>Browser</B><BR/><FONT POINT-SIZE="9">student chat page · admin page</FONT>>];
   providers [peripheries=2, label=<<B>AI model — first one that works</B><BR/><FONT POINT-SIZE="9">OpenRouter · Groq · GitHub Models · Gemini<BR/>Anthropic · OpenAI · LM Studio · Ollama (local)</FONT>>];
 
@@ -19,7 +19,7 @@ digraph architecture {
   subgraph cluster_index {
     label=<<B>INDEXING</B> (offline)<BR/><FONT POINT-SIZE="9" FACE="DejaVu Sans Mono">python run_pipeline.py</FONT>>;
     style=rounded; color=black; penwidth=1.3; fontsize=12; margin=12; labeljust=l;
-    crawl [label=<<B>1 · Crawl</B>   [D1 D2]<BR/><FONT POINT-SIZE="9">IT pages only, each URL once,<BR/>save pages + files, retry once</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">scraper/crawler.py</FONT>>];
+    crawl [label=<<B>1 · Crawl</B>   [D1 D2]<BR/><FONT POINT-SIZE="9">IT pages + listed college pages,<BR/>each URL once, save pages + files,<BR/>retry once</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">scraper/crawler.py</FONT>>];
     read  [label=<<B>2 · Read text</B>   [D3]<BR/><FONT POINT-SIZE="9">HTML / PDF / DOCX → text<BR/>scanned pages → OCR (cached)</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/readers.py · ocr.py</FONT>>];
     name  [label=<<B>3 · Name &amp; date</B>   [D4 D5]<BR/><FONT POINT-SIZE="9">"CLICK HERE" → "V SEM · 2024-28 BATCH"<BR/>date: text › batch › file › server</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/link_labels.py · dates.py</FONT>>];
     chunk [label=<<B>4 · Chunk</B>   [D6]<BR/><FONT POINT-SIZE="9">~900-char pieces cut at paragraphs<BR/>+ one course-list piece per document</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/chunking.py · course_list.py</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/build.py (runs 2–4)</FONT>>];

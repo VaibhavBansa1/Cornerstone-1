@@ -1,8 +1,8 @@
 # How the MITS Help Desk works
 
-A student asks a question → we find the right pieces of the college website → an AI writes the answer from only those pieces, with sources.
+A student asks a question → we find the right pieces of the college website (all of the IT department, plus the main college-wide pages) → an AI writes the answer from only those pieces, with sources.
 
-This page explains each feature in plain words: **why** it exists, **what** it does, and **where** the code is. For the diagrams, the full decision table and the folder map, see **[architecture/architecture.md](architecture/architecture.md)**. The tags **[D1]**–**[D14]** below match that table.
+This page explains each feature in plain words: **why** it exists, **what** it does, and **where** the code is. For the diagrams, the full decision table and the folder map, see **[architecture/architecture.md](architecture/architecture.md)**. The tags **[D1]**–**[D19]** below match that table.
 
 The features are in the order a document travels through the system: collected → read → named and dated → chunked → indexed, then question → understood → searched → answered → shown.
 
@@ -11,10 +11,14 @@ The features are in the order a document travels through the system: collected �
 ## Indexing (offline)
 
 ### 1. Crawler: collects the website [D1 D2]
-**Why:** we only want the IT department, nothing else, plus every PDF it links to.
-**What:** visits each department page once, saves it, and downloads linked PDFs and images (including Google Drive files).
-**How:** starts at the department page and follows only department links (URL prefix + the department's sidebar menu). It remembers what it visited, so it never loops. Temporary errors (timeout, server busy) are retried once. Files are written to a temp file and then swapped in, so stopping the crawl never leaves a half-written file. A stopped crawl keeps the last complete `manifest.json` and saves its progress to `manifest.partial.json`.
-**Where:** `scraper/crawler.py`. Check a crawl: `uv run scripts/check_crawl.py --live`.
+**Why:** we want the whole IT department plus the college-wide information students ask about (rules, calendar, fees, hostel), and nothing else.
+**What:** visits each page once, saves it, and downloads the PDFs and images it links to (including Google Drive files).
+**How:** two kinds of pages:
+- **IT department:** starts at the department page and follows every department link (URL prefix + the department's sidebar menu).
+- **College-wide:** a fixed list of ~55 pages and 7 rule PDFs in `config.COLLEGE_PAGES` (ordinances, academic calendar, exam cell, fee structure, admissions, hostels, library, anti-ragging and grievance cells, clubs, placement, notifications). Each is saved with its files, but its links are **not** followed, so the crawl never spreads to tenders, recruitment or other departments.
+
+It remembers what it visited, so it never loops. Temporary errors are retried once. Files are written to a temp file and then swapped in, so stopping the crawl never leaves a half-written file; a stopped crawl keeps the last complete `manifest.json`. To add another department or page: add its URL to `COLLEGE_PAGES` (or point `START_URL` at another department) and rebuild.
+**Where:** `scraper/crawler.py`, `config.py`. Check a crawl: `uv run scripts/check_crawl.py --live`.
 
 ### 2. Reading text, including scanned PDFs [D3]
 **Why:** 1,737 of 4,896 PDF pages were scans (pictures of paper), e.g. 14 of 19 pages of the 2026 V SEM syllabus, so the bot couldn't read them.
@@ -74,7 +78,7 @@ The features are in the order a document travels through the system: collected �
 - course codes are batch-specific
 - if the answer isn't in the sources, say so
 - reply in the student's language (English / Hinglish / Hindi)
-- only IT-website facts: for the mess, canteen, fees, directions, other departments… say "I don't have that" and point to mitsgwalior.in (a 2019 magazine joke about mess food is not proof there is a mess)
+- only facts from the sources: for anything they don't cover (other departments, transport, directions…) say "I don't have that" and point to mitsgwalior.in (a 2019 magazine joke about mess food is not proof there is a mess)
 - never read out students' names or roll numbers from debarred / marks / attendance lists; point to the notice instead
 - "lab" can mean a room or a practical subject: list the labs and say lab courses are in each syllabus
 
@@ -97,12 +101,16 @@ Checked on 26 Oct 2026: 377/377 saved copies and 377/377 original links open.
 While it works, the chat shows **live progress** instead of a spinner: "Reading your question → Understood as 5th sem · 2024-28 batch", "Searching 9,348 pieces of the IT website", "Found 6 matching sources → Reading: V SEM · 2024-28 BATCH …", "Writing the answer with groq · 4 s" (and "Previous AI was busy · now asking openrouter" when it falls back). The server sends these as they happen (`/api/query/stream`).
 **Where:** `web/static/` (pages), `web/sources.py` (names, links, saved pages), `web/app.py` (URLs). Check every link: `uv run scripts/check_links.py`.
 
-### 12. Admin page and privacy [D13 D14]
+### 12. One session, no accounts [D19]
+**Why:** it's a help desk, not a messenger. A student opens it, asks one or several questions, and leaves.
+**What:** no student login and nothing remembered: reload the page and the conversation is gone. This is a deliberate choice (less to secure, nothing personal stored), not a missing feature.
+
+### 13. Admin page and privacy [D13 D14]
 **What:** upload a PDF/DOCX/TXT and it goes through the same steps 2–6 automatically, in the background. You can also see what's indexed and which sources are cited most.
 **Privacy:** question and answer text is **never stored**, only counts and cited sources. Saved copies are served only from `data/raw/` and `data/uploads/`, never the index or the log.
 **Where:** `web/app.py`, `web/chatlog.py`, `web/static/admin.*`.
 
-### 13. 55 test questions, graded automatically
+### 14. 55 test questions, graded automatically
 **Why:** "it seems to work" isn't a measurement. Students ask weird things.
 **What:** `scripts/eval_questions.json` has 55 questions in 9 groups: labs (rooms vs practicals), School vs department, schemes, things not on the IT site (mess, canteen, fees, directions, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer and a score per group. The grading is keyword matching, so read the answers too.
 **Result (30 Oct 2026, local Ollama model `huihui-gemma`, ~9 s per answer):**
@@ -123,7 +131,7 @@ While it works, the chat shows **live progress** instead of a spinner: "Reading 
 The one left ("government scholarships?") passes on some runs and not others: the small local model sometimes opens with "Yes" when the source only says "check the website for scholarship updates". A larger model (Groq / OpenRouter) should do better; re-run `scripts/eval.py` with it before the demo.
 **Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run: `uv run scripts/eval.py` (about 9 minutes on the GPU PC).
 
-### 14. Nothing optional can crash it
+### 15. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. OCR not installed → scanned pages skipped with a warning. Crawl stopped → old data kept. Each case has a test in `tests/`.
 
 ---
