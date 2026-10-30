@@ -47,14 +47,15 @@ _BATCH_HINT = re.compile(
 )
 _YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
 
+# Checked in this order; the first match is the topic.
 TOPICS = {
     "syllabus": ("syllabus", "syllabi", "subjects", "subject", "courses", "course", "curriculum", "scheme", "papers"),
     "timetable": ("timetable", "time table", "time-table", "tt", "schedule", "classes", "lecture"),
     "exam": ("exam", "exams", "evaluation", "major", "minor", "mid sem", "midsem", "test", "paper"),
     "result": ("result", "results", "marks", "grade", "sgpa", "cgpa"),
+    "contacts": ("contact", "contacts", "phone", "mobile", "email", "e-mail"),
     "faculty": ("faculty", "teacher", "teachers", "professor", "hod", "dean", "coordinator", "head"),
     "labs": ("lab", "labs", "laboratory", "laboratories"),
-    "contacts": ("contact", "contacts", "phone", "mobile", "email", "e-mail"),
     "programmes": ("programmes", "programs offered", "intake", "degrees"),
     "overview": ("everything", "overview", "introduction", "about the department", "about the school",
                  "about it dept", "about it department", "about the it", "about dept"),
