@@ -40,7 +40,7 @@ _instances: dict[str, LLMProvider] = {}
 @dataclass
 class Reply:
     text: str
-    provider: str                      # e.g. "groq:llama-3.3-70b-versatile", or "none"
+    provider: str                      # e.g. "groq:openai/gpt-oss-120b", or "none"
     errors: list[str] = field(default_factory=list)
 
     @property
