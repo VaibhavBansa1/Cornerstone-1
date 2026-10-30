@@ -8,6 +8,22 @@ import os
 from pathlib import Path
 
 
+def _load_dotenv(path: Path) -> None:
+    """Read KEY=value lines from a .env file next to this one (API keys
+    live there, never in git). Real environment variables win."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv(Path(__file__).resolve().parent / ".env")
+
+
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
