@@ -63,7 +63,7 @@ function renderMarkdown(text, answerIdx, valid) {
 function addRow(who) {
   $("welcome")?.remove();
   const row = el("div", "msg " + who);
-  if (who === "bot") row.appendChild(el("div", "avatar", "IT"));
+  if (who === "bot") row.appendChild(el("div", "avatar", "M"));
   const bubble = el("div", "bubble");
   row.appendChild(bubble);
   messages.appendChild(row);
@@ -237,7 +237,7 @@ function progressView(bubble) {
       if (ev.step === "understood") {
         if (ev.value) detail(first, "Understood as: " + ev.value);
       } else if (ev.step === "searching") {
-        add(`Searching ${Number(ev.value).toLocaleString("en-IN")} pieces of the IT website`);
+        add(`Searching ${Number(ev.value).toLocaleString("en-IN")} pieces of the MITS website`);
       } else if (ev.step === "found") {
         const li = add(ev.sources.length ? `Found ${ev.sources.length} matching sources` : "No matching sources found");
         // show the source names one by one, so it's clear what is being read
