@@ -73,7 +73,8 @@ def test_auto_skips_providers_without_keys(monkeypatch):
         monkeypatch.delenv(env, raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "x")
     monkeypatch.setattr(registry.OllamaProvider, "is_configured", lambda self: False)
-    assert [p.name for p in registry.active_providers()] == ["groq"]
+    # the Groq key also enables groq_small (same key, smaller model, its own daily allowance)
+    assert [p.name for p in registry.active_providers()] == ["groq", "groq_small"]
 
 
 def test_reasoning_tags_are_removed():
