@@ -34,7 +34,7 @@ Set one or more API keys. Every provider with a key is tried in order; if one fa
 | Provider | Key | Model (default) |
 |---|---|---|
 | OpenRouter (free `:free` models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`google/gemma-4-31b-it:free`) |
-| Groq (free tier) | `GROQ_API_KEY` | `GROQ_MODEL` (`llama-3.3-70b-versatile`) |
+| Groq (free tier) | `GROQ_API_KEY` | `GROQ_MODEL` (`openai/gpt-oss-120b`) |
 | GitHub Models | `GITHUB_MODELS_TOKEN` | `GITHUB_MODELS_MODEL` (`openai/gpt-4.1-mini`) |
 | Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` |
