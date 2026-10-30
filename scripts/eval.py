@@ -11,6 +11,7 @@ Every run is saved to data/eval/<time>.json; the report
 (data/eval_report.md) compares the new run with the previous one.
 """
 import json
+import os
 import re
 import sys
 import time
@@ -30,7 +31,7 @@ REPORT = config.DATA_DIR / "eval_report.md"
 UNKNOWN = re.compile(
     r"not (explicitly |specifically )?(in|mentioned|available|found|covered|listed|given|specified)"
     r"|(do not|don't|does not|doesn't) (explicitly |specifically )?(have|contain|mention|include|cover|specify|list)"
-    r"|(no|not any) (information|details|mention|data)"
+    r"|(no|not any) (specific |explicit )?(information|details|mention|data)"
     r"|could ?n[o']t find|cannot find|can't find|unable to find|not able to find"
     r"|i (don't|do not) know|not sure"
     r"|(jaankari|jankari|information) nahi|nahi (hai|mili|pata)|pata nahi",
@@ -73,8 +74,13 @@ def main():
     if previous:
         before = {r["id"]: r for r in json.loads(previous[-1].read_text(encoding="utf-8"))["results"]}
 
+    # Free API tiers limit requests per minute; a pause keeps every answer
+    # on the same model instead of falling back. EVAL_PAUSE_SECONDS=20
+    pause = float(os.environ.get("EVAL_PAUSE_SECONDS", "0"))
     results = []
-    for item in data:
+    for n, item in enumerate(data):
+        if pause and n:
+            time.sleep(pause)
         started = time.perf_counter()
         r = answer(item["q"])
         secs = time.perf_counter() - started
@@ -100,8 +106,10 @@ def write_report(results, before, stamp):
     for r in results:
         by_cat[r["cat"]].append(r)
     total = sum(r["pass"] for r in results)
+    models = ", ".join(f"{k} {v}" for k, v in sorted(
+        {m: sum(r["provider"].split(":")[0] == m for r in results) for m in {r["provider"].split(":")[0] for r in results}}.items()))
     out = [f"# Test questions: {total}/{len(results)} passed ({stamp})\n",
-           "Automatic grading by keywords: read the answers below too.\n",
+           f"Answered by: {models}. Automatic grading by keywords: read the answers below too.\n",
            "| Category | Passed | Before |", "|---|---|---|"]
     for cat, rs in by_cat.items():
         prev = [before[r["id"]]["pass"] for r in rs if r["id"] in before]
