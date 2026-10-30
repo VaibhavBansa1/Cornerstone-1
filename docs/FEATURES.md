@@ -148,7 +148,7 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 | Rebuild only (after changing settings) | `uv run run_pipeline.py --skip-crawl` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | Start the website | `uv run -m web.app` → http://localhost:5000 |
-| Grade answers on the 55 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Grade answers on the 63 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
 | Answer your own list of questions | `uv run scripts/ask_batch.py questions.txt` → `data/eval_answers.md` |
 | Check the crawl got everything | `uv run scripts/check_crawl.py --live` |
 | See why a piece was / wasn't found | `uv run scripts/debug_retrieval.py "question" "expected text"` |
