@@ -193,7 +193,12 @@
     "computational thinking",
     "smart home",
     "excel",
-    "know your country"
+    "know your country",
+    "activity",
+    "holistic",
+    "performing arts",
+    "sports",
+    "mentor"
    ],
    "min_any": 3
   },
@@ -212,9 +217,16 @@
   },
   {
    "id": "scm6",
-   "cat": "Schemes",
+   "cat": "College-wide (new pages)",
    "q": "Are there any government scholarships for IT students?",
-   "expect": "unknown"
+   "expect": "answer",
+   "must": [
+    "scholarship"
+   ],
+   "any": [
+    "govt|government",
+    "m\\.?\\s?p\\.?"
+   ]
   },
   {
    "id": "out1",
@@ -239,7 +251,9 @@
    "any": [
     "amul",
     "coffee",
-    "about"
+    "about",
+    "yes",
+    "facilit"
    ]
   },
   {
@@ -271,9 +285,16 @@
   },
   {
    "id": "out5",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "How do I reach MITS from Gwalior railway station?",
-   "expect": "unknown"
+   "expect": "answer",
+   "must": [
+    "3\\s?km"
+   ],
+   "not": [
+    "banmore",
+    "narrow gauge"
+   ]
   },
   {
    "id": "out6",
@@ -427,6 +448,10 @@
    ],
    "any": [
     "MOOC"
+   ],
+   "not": [
+    "\\b18 additional",
+    "\\*\\*18\\b"
    ]
   },
   {
