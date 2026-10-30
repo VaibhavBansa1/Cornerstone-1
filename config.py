@@ -250,7 +250,7 @@ TOPIC_PAGES = {
 # anthropic, ollama, none
 LLM_PROVIDERS = _env("LLM_PROVIDERS", _env("RAG_GENERATION_PROVIDER", "auto"))
 AUTO_PROVIDER_ORDER = [
-    "openrouter", "groq", "github", "gemini", "anthropic", "openai", "openai_compat", "ollama",
+    "groq", "groq_small", "openrouter", "github", "gemini", "anthropic", "openai", "openai_compat", "ollama",
 ]
 LLM_MAX_TOKENS = _env_int("LLM_MAX_TOKENS", 1024)
 LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.2)
@@ -272,6 +272,14 @@ PROVIDER_SETTINGS = {
         "base_url": _env("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         "api_key_env": "GROQ_API_KEY",
         "model": _env("GROQ_MODEL", "openai/gpt-oss-120b"),
+    },
+    # Same Groq key, a smaller model with its own free daily allowance
+    # (the big one allows 200,000 tokens a day, about 50-60 questions).
+    "groq_small": {
+        "kind": "openai",
+        "base_url": _env("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+        "api_key_env": "GROQ_API_KEY",
+        "model": _env("GROQ_SMALL_MODEL", "openai/gpt-oss-20b"),
     },
     "github": {  # GitHub Models -- free with a GitHub personal access token
         "kind": "openai",

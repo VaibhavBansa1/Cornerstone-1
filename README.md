@@ -35,6 +35,7 @@ Set one or more API keys. Every provider with a key is tried in order; if one fa
 |---|---|---|
 | OpenRouter (free `:free` models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`google/gemma-4-31b-it:free`) |
 | Groq (free tier) | `GROQ_API_KEY` | `GROQ_MODEL` (`openai/gpt-oss-120b`) |
+| Groq, smaller model (own free allowance) | same `GROQ_API_KEY` | `GROQ_SMALL_MODEL` (`openai/gpt-oss-20b`) |
 | GitHub Models | `GITHUB_MODELS_TOKEN` | `GITHUB_MODELS_MODEL` (`openai/gpt-4.1-mini`) |
 | Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` |
@@ -43,7 +44,9 @@ Set one or more API keys. Every provider with a key is tried in order; if one fa
 | Ollama (local, no key) | `OLLAMA_BASE_URL` | `OLLAMA_MODEL` |
 
 Easiest: copy `.env.example` to `.env` and paste your keys there (it's never uploaded to git). Or set them as environment variables.
-Pick your own order: `LLM_PROVIDERS=groq,openrouter,ollama`.
+Pick your own order: `LLM_PROVIDERS=groq,groq_small,openrouter,ollama`.
+
+Free-tier limits to know: Groq's big model allows 8,000 tokens a minute and 200,000 a day (one question uses about 3,000–5,000, so about 1–2 questions a minute and 50–60 a day); `groq_small` has its own allowance, so it is the natural next step in the chain. OpenRouter's free models allow 50 requests a day.
 PowerShell: `$env:GROQ_API_KEY = "gsk_..."` · bash: `export GROQ_API_KEY=gsk_...`
 
 Free model names change over time; override the `*_MODEL` variable if a default disappears.
