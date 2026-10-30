@@ -7,7 +7,7 @@ They are not updated. For how the system works now, read
 | File | What it is | What has changed since |
 |---|---|---|
 | `Synopsis_AI_Chatbot_MITS.docx` | Project synopsis (Shahid Khan, Vaibhav Bansal; guide Ms. Aradhana Saxena) | Embedding model is now multilingual-e5-small (was all-MiniLM-L6-v2); search is hybrid (keywords + meaning + reranker), not vectors only; scanned PDFs are read with OCR; every chunk is dated; more AI providers with automatic fallback |
-| `Presentation_AI_Chatbot_MITS.pptx` | Minor-evaluation slides | Same as above, plus: 86 automated tests (was 16), 55 graded test questions, college-wide pages added to the IT pages, live progress in the chat |
+| `Presentation_AI_Chatbot_MITS.pptx` | Minor-evaluation slides | Same as above, plus: 87 automated tests (was 16), 63 graded test questions, college-wide pages added to the IT pages, live progress in the chat |
 | `architecture_v1_original.png` | First architecture diagram (4 layers) | Replaced by `../architecture/architecture.png`, which shows every step and design decision |
 
 The milestone reports (Requirement Analysis, System Design, Implementation,

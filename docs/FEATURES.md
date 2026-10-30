@@ -110,26 +110,27 @@ While it works, the chat shows **live progress** instead of a spinner: "Reading 
 **Privacy:** question and answer text is **never stored**, only counts and cited sources. Saved copies are served only from `data/raw/` and `data/uploads/`, never the index or the log.
 **Where:** `web/app.py`, `web/chatlog.py`, `web/static/admin.*`.
 
-### 14. 55 test questions, graded automatically
+### 14. 63 test questions, graded automatically
 **Why:** "it seems to work" isn't a measurement. Students ask weird things.
-**What:** `scripts/eval_questions.json` has 55 questions in 9 groups: labs (rooms vs practicals), School vs department, schemes, things not on the IT site (mess, canteen, fees, directions, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer and a score per group. The grading is keyword matching, so read the answers too.
-**Result (30 Oct 2026, local Ollama model `huihui-gemma`, ~9 s per answer):**
+**What:** `scripts/eval_questions.json` has 63 questions in 10 groups: labs (rooms vs practicals), School vs department, schemes, college-wide (mess, canteen, fees, hostel, library, attendance, exams, ragging, clubs, NAAC), things the site doesn't cover (bus timings, JEE cutoff, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer, which model gave it, and a score per group. The grading is keyword matching, so read the answers too; `--regrade` grades the last run again after a grader fix, without asking the AI again.
 
-| Group (questions) | Before | After |
-|---|---|---|
-| Labs: rooms vs practicals (6) | 4 | 6 |
-| School / department name (6) | 6 | 6 |
-| Schemes (6) | 4 | 5 |
-| Not on the IT website: mess, canteen, fees, directions… (11) | 7 | 11 |
-| Where is … (5) | 5 | 5 |
-| Mandatory tasks (6) | 5 | 6 |
-| People and contacts (5) | 4 | 5 |
-| Syllabus, timetable, notices (6) | 5 | 6 |
-| Vague / typos (4) | 3 | 4 |
-| **Total (55)** | **43** | **54** |
+**Results (30 Oct 2026):**
 
-The one left ("government scholarships?") passes on some runs and not others: the small local model sometimes opens with "Yes" when the source only says "check the website for scholarship updates". A larger model (Groq / OpenRouter) should do better; re-run `scripts/eval.py` with it before the demo.
-**Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run: `uv run scripts/eval.py` (about 9 minutes on the GPU PC).
+| Run | Data | Model | Score | Time per answer |
+|---|---|---|---|---|
+| Before fixes | IT pages only | local Ollama (`huihui-gemma`) | 43 / 55 | ~9 s |
+| After fixes | IT pages only | local Ollama | 54 / 55 | ~9 s |
+| **Final** | **IT + college pages** | **Groq (`openai/gpt-oss-120b`)** | **61 / 63** | **3.6 s median** |
+
+Final run by group: labs 6/6 · School/department 6/6 · schemes 5/5 · college-wide 16/16 · not on the site 3/4 · where is 5/5 · mandatory tasks 5/6 · contacts 5/5 · syllabus/timetable/notices 6/6 · vague/typos 4/4.
+
+The two that still fail:
+- **"Who is the HOD of CSE?"**: CSE isn't covered, but a 2019 IT magazine names a "CSE & IT" head, and the model reports that instead of saying it doesn't know.
+- **"What is mandatory in 5th sem for the 2024 batch?"**: it lists the subjects, not the mandatory components (workshops, SIP, NEC), because the batch's syllabus outranks the scheme document.
+
+Found along the way: the 2026 B.Tech ordinance itself says **18** extra credits for Honours in one place (sec. 6.2, 160 + 18 = 178) and **20** in another; both answers are accepted.
+
+**Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run on the free Groq tier with a pause so every answer comes from the same model: `EVAL_PAUSE_SECONDS=20 LLM_PROVIDERS=groq,ollama uv run --no-sync scripts/eval.py` (about 40 minutes; without the pause about 10, but some answers then fall back to the local model).
 
 ### 15. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. OCR not installed → scanned pages skipped with a warning. Crawl stopped → old data kept. Each case has a test in `tests/`.

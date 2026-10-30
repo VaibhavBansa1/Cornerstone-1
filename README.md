@@ -57,14 +57,14 @@ Free model names change over time; override the `*_MODEL` variable if a default 
 | Crawl only / chunks only / index only | `uv run -m scraper.crawler` · `uv run -m ingestion.build` · `uv run -m rag.embed_index` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | See exactly what the AI receives | `uv run -m rag.pipeline --show-prompt "question"` |
-| Grade the 55 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Grade the 63 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
 | Run tests | `uv run pytest tests -q` |
 
 More checking tools (crawl, links, retrieval debugging, batch answers) are listed in [docs/FEATURES.md](docs/FEATURES.md#everyday-commands).
 
 ## Does it answer correctly?
 
-55 test questions (labs, School vs department, schemes, things not on the IT site, "where is…", mandatory tasks, contacts, timetables, typos) are graded with `uv run scripts/eval.py`. On 30 Oct 2026 with the local Ollama model: **43/55 before this round of fixes, 54/55 after.** Details and the per-group table: [docs/FEATURES.md](docs/FEATURES.md#14-55-test-questions-graded-automatically).
+63 test questions (labs, School vs department, schemes, college-wide rules / fees / hostel / exams, things the site doesn't cover, "where is…", mandatory tasks, contacts, timetables, typos) are graded with `uv run scripts/eval.py`. On 30 Oct 2026: **43/55 before this round of fixes → 61/63 with the college pages added, on Groq (`openai/gpt-oss-120b`), median 3.6 s per answer.** Details: [docs/FEATURES.md](docs/FEATURES.md#14-63-test-questions-graded-automatically).
 
 ## Settings
 
