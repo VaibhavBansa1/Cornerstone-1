@@ -17,3 +17,7 @@ data/chat_log.db
 # local run logs
 *.log
 data/eval_answers.md
+data/eval/
+data/eval_report.md
+data/*.log
+data/*.err
