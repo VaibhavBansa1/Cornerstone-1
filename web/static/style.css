@@ -292,3 +292,9 @@ ul.plain .when { color: var(--muted); font-size: 12px; white-space: nowrap; flex
   table.docs col.c-date { width: 0; }
   table.docs th:nth-child(3), table.docs td:nth-child(3) { display: none; }
 }
+
+/* tables in answers */
+.answer .table-wrap { overflow-x: auto; margin: 6px 0 10px; }
+.answer table { border-collapse: collapse; font-size: 14px; min-width: 60%; }
+.answer th, .answer td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; vertical-align: top; }
+.answer th { background: var(--brand-soft, #eef2f8); font-weight: 600; }
