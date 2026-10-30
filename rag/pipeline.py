@@ -127,21 +127,32 @@ def build_prompt(query: str, results: list[dict], today: date | None = None,
 
 
 def generate_answer(query: str, results: list[dict], today: date | None = None,
-                    understanding: Understanding | None = None) -> llm.Reply:
+                    understanding: Understanding | None = None, on_attempt=None) -> llm.Reply:
     system, user_message = build_prompt(query, results, today, understanding)
     context = build_context(results)
-    reply = llm.generate(system, user_message)
+    reply = llm.generate(system, user_message, on_attempt=on_attempt)
     if not reply.generated:
         why = "; ".join(reply.errors) or "no LLM provider is configured or reachable"
         reply.text = f"[No generated answer ({why}) -- showing the most relevant passages]\n\n{context}"
     return reply
 
 
-def answer(query: str, top_k: int = config.TOP_K) -> dict:
+def answer(query: str, top_k: int = config.TOP_K, on_step=None) -> dict:
+    """on_step(kind, data), if given, is called as each step starts, so the
+    chat page can show progress: "understood", "searching", "found" (the
+    results), "writing" (provider name; called again if it falls back)."""
+    def step(kind, data=None):
+        if on_step:
+            on_step(kind, data)
+
     # Step 0: what is this about? (semester, batch, session, topic)
     understanding = understand(query)
+    step("understood", understanding.describe())
+    step("searching", len(_get_retriever().chunks))
     results = order_for_prompt(retrieve(query, top_k=top_k, understanding=understanding))
-    reply = generate_answer(query, results, understanding=understanding)
+    step("found", results)
+    reply = generate_answer(query, results, understanding=understanding,
+                            on_attempt=lambda name, error: step("writing", {"provider": name, "after_error": error}))
     return {
         "query": query,
         "answer": reply.text,

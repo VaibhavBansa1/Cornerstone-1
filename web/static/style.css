@@ -122,13 +122,21 @@ body.chat-page { display: flex; flex-direction: column; height: 100vh; height: 1
 }
 .suggest button:hover { border-color: var(--brand); background: #fbfcff; }
 
-.typing span {
-  display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%;
-  background: #9aa4b2; animation: blink 1.2s infinite;
+/* live progress while answering */
+.progress { list-style: none; margin: 0; padding: 2px 0; font-size: 14px; color: var(--muted); min-width: 240px; }
+.progress li { position: relative; padding: 3px 0 3px 22px; }
+.progress li::before {
+  content: ""; position: absolute; left: 2px; top: 8px; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--border);
 }
-.typing span:nth-child(2) { animation-delay: .2s; }
-.typing span:nth-child(3) { animation-delay: .4s; }
-@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.progress li.done::before { border-color: var(--brand); background: var(--brand); }
+.progress li.now { color: var(--text); }
+.progress li.now::before { border-color: var(--brand); border-right-color: transparent; animation: spin .8s linear infinite; }
+.progress .p-detail { display: block; font-size: 12.5px; color: var(--muted); padding-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 520px; animation: fadein .25s ease; }
+.progress .p-secs { font-variant-numeric: tabular-nums; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadein { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; } }
 
 .composer {
   display: flex; gap: 8px; align-items: flex-end; width: calc(100% - 32px); max-width: 780px;

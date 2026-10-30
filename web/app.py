@@ -4,6 +4,7 @@
 
 Endpoints:
     POST   /api/query              {"question": "..."} -> answer + sources
+    POST   /api/query/stream       same, with progress lines first (chat page)
     GET    /api/status             index / generation backend readiness
     GET    /api/documents          what is currently indexed
     GET    /api/stats              usage stats from the chat log
@@ -12,15 +13,17 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import queue
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import unquote
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 import config
@@ -112,41 +115,90 @@ def status():
     )
 
 
-@app.post("/api/query")
-def query():
+def _check_query():
+    """(question, error response or None)"""
     question = ((request.get_json(silent=True) or {}).get("question") or "").strip()
     if not question:
-        return jsonify({"error": "Please type a question."}), 400
+        return question, (jsonify({"error": "Please type a question."}), 400)
     if not pipeline.index_exists():
-        return jsonify({"error": "The document index has not been built yet. Run `python run_pipeline.py` first."}), 503
+        return question, (jsonify({"error": "The document index has not been built yet. "
+                                            "Run `python run_pipeline.py` first."}), 503)
+    return question, None
 
-    started = time.perf_counter()
-    try:
-        result = pipeline.answer(question)
-    except IndexMismatchError as exc:
-        return jsonify({"error": str(exc)}), 503
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
 
+def _answer_payload(result: dict, elapsed_ms: int) -> dict:
+    """The JSON the chat page renders; also logs the (anonymous) usage."""
     sources = [public_source(i, c) for i, c in enumerate(result["sources"], 1)]
     # When no LLM answered, the pipeline returns the retrieved passages
     # instead; the UI then shows those passages.
     generated = result.get("generated", result["provider"] != "none")
     numbers = cited_numbers(result["answer"]) if generated else set()
     cited = [s for s in sources if s["n"] in numbers] or sources[:1]
-
     chatlog.log_question(cited, result["provider"], elapsed_ms)  # question text is never stored
-    return jsonify(
-        {
-            "answer": result["answer"] if generated else None,
-            "generated": generated,
-            "provider": result["provider"],
-            "sources": sources,
-            "cited": [s["n"] for s in cited],
-            "response_ms": elapsed_ms,
-            # e.g. "5th sem · 2024-28 batch · July-Dec 2026 session · syllabus"
-            "understood_as": result.get("understood_as") or "",
-        }
-    )
+    return {
+        "answer": result["answer"] if generated else None,
+        "generated": generated,
+        "provider": result["provider"],
+        "sources": sources,
+        "cited": [s["n"] for s in cited],
+        "response_ms": elapsed_ms,
+        # e.g. "5th sem · 2024-28 batch · July-Dec 2026 session · syllabus"
+        "understood_as": result.get("understood_as") or "",
+    }
+
+
+@app.post("/api/query")
+def query():
+    question, error = _check_query()
+    if error:
+        return error
+    started = time.perf_counter()
+    try:
+        result = pipeline.answer(question)
+    except IndexMismatchError as exc:
+        return jsonify({"error": str(exc)}), 503
+    return jsonify(_answer_payload(result, int((time.perf_counter() - started) * 1000)))
+
+
+def _step_event(kind: str, data) -> dict:
+    """A progress line for the chat page, in plain words."""
+    if kind == "found":
+        return {"type": "step", "step": "found", "sources": [source_label(c) for c in data]}
+    if kind == "writing":
+        return {"type": "step", "step": "writing", "provider": data["provider"], "fallback": bool(data["after_error"])}
+    return {"type": "step", "step": kind, "value": data}
+
+
+@app.post("/api/query/stream")
+def query_stream():
+    """Same answer as /api/query, but sends progress first: one JSON object
+    per line ({"type": "step", ...} lines, then {"type": "answer", ...})."""
+    question, error = _check_query()
+    if error:
+        return error
+    events: queue.Queue = queue.Queue()
+
+    def work():
+        started = time.perf_counter()
+        try:
+            result = pipeline.answer(question, on_step=lambda k, d: events.put(_step_event(k, d)))
+            events.put({"type": "answer", **_answer_payload(result, int((time.perf_counter() - started) * 1000))})
+        except Exception as exc:
+            log.exception("Answering failed")
+            events.put({"type": "error", "error": str(exc) if isinstance(exc, IndexMismatchError)
+                        else "Something went wrong while answering."})
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        while True:
+            event = events.get()
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+            if event["type"] in ("answer", "error"):
+                return
+
+    return Response(lines(), mimetype="application/x-ndjson", headers={"Cache-Control": "no-cache",
+                                                                       "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/documents")
