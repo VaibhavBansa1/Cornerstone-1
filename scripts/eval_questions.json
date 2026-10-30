@@ -218,36 +218,55 @@
   },
   {
    "id": "out1",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "Is there a mess inside college?",
-   "expect": "unknown"
+   "expect": "answer",
+   "must": [
+    "mess"
+   ],
+   "any": [
+    "hostel"
+   ]
   },
   {
    "id": "out2",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "Is there a canteen in the college?",
-   "expect": "unknown"
+   "expect": "answer",
+   "must": [
+    "canteen"
+   ],
+   "any": [
+    "amul",
+    "coffee",
+    "about"
+   ]
   },
   {
    "id": "out3",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "What is the hostel fee?",
-   "expect": "unknown",
-   "not": [
-    "rs\\.? ?\\d{4,}",
-    "₹ ?\\d{4,}",
-    "\\b\\d{2,3},\\d{3}\\b"
+   "expect": "answer",
+   "not": [],
+   "must": [
+    "hostel"
+   ],
+   "any": [
+    "\\d{1,2},\\d{3}",
+    "\\d{5,}"
    ]
   },
   {
    "id": "out4",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "What is the B.Tech fee per year?",
-   "expect": "unknown",
-   "not": [
-    "rs\\.? ?\\d{4,}",
-    "₹ ?\\d{4,}",
-    "\\b\\d{2,3},\\d{3}\\b"
+   "expect": "answer",
+   "not": [],
+   "any": [
+    "40,000",
+    "1,60,000",
+    "1,00,000",
+    "60,000"
    ]
   },
   {
@@ -276,9 +295,13 @@
   },
   {
    "id": "out9",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "What are the library timings?",
-   "expect": "unknown"
+   "expect": "answer",
+   "must": [
+    "10\\s*(a\\.?m|:00)",
+    "8[:.]30"
+   ]
   },
   {
    "id": "out10",
@@ -288,9 +311,14 @@
   },
   {
    "id": "out11",
-   "cat": "Not on the IT website",
+   "cat": "College-wide (new pages)",
    "q": "canteen me kya kya milta hai?",
-   "expect": "unknown"
+   "expect": "either",
+   "any": [
+    "amul",
+    "coffee",
+    "canteen"
+   ]
   },
   {
    "id": "loc1",
@@ -572,6 +600,98 @@
    "expect": "answer",
    "must": [
     "johari"
+   ]
+  },
+  {
+   "id": "col1",
+   "cat": "College-wide (new pages)",
+   "q": "What is the minimum attendance required to sit in exams?",
+   "expect": "answer",
+   "must": [
+    "75"
+   ]
+  },
+  {
+   "id": "col2",
+   "cat": "College-wide (new pages)",
+   "q": "When are the major (end semester) exams this semester?",
+   "expect": "answer",
+   "any": [
+    "nov",
+    "dec"
+   ],
+   "must": [
+    "2026"
+   ]
+  },
+  {
+   "id": "col3",
+   "cat": "College-wide (new pages)",
+   "q": "How many books does the central library have?",
+   "expect": "answer",
+   "any": [
+    "1,00,000",
+    "100,000",
+    "1 lakh",
+    "one lakh",
+    "1,00,000"
+   ]
+  },
+  {
+   "id": "col4",
+   "cat": "College-wide (new pages)",
+   "q": "hostel me kya kya facilities hai?",
+   "expect": "answer",
+   "any": [
+    "mess",
+    "cctv",
+    "security",
+    "recreation",
+    "wi-?fi",
+    "guest",
+    "sport"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "col5",
+   "cat": "College-wide (new pages)",
+   "q": "Is there a dispensary or doctor on campus?",
+   "expect": "answer",
+   "any": [
+    "dispensary",
+    "medical",
+    "doctor"
+   ]
+  },
+  {
+   "id": "col6",
+   "cat": "College-wide (new pages)",
+   "q": "What should I do if someone is ragging me?",
+   "expect": "answer",
+   "must": [
+    "ragging"
+   ]
+  },
+  {
+   "id": "col7",
+   "cat": "College-wide (new pages)",
+   "q": "What clubs and societies are there at MITS?",
+   "expect": "answer",
+   "must": [
+    "club|societ"
+   ]
+  },
+  {
+   "id": "col8",
+   "cat": "College-wide (new pages)",
+   "q": "Is MITS NAAC accredited, and with which grade?",
+   "expect": "answer",
+   "must": [
+    "naac"
+   ],
+   "any": [
+    "a\\+\\+"
    ]
   }
  ]
