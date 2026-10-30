@@ -105,7 +105,22 @@ While it works, the chat shows **live progress** instead of a spinner: "Reading 
 ### 13. 55 test questions, graded automatically
 **Why:** "it seems to work" isn't a measurement. Students ask weird things.
 **What:** `scripts/eval_questions.json` has 55 questions in 9 groups: labs (rooms vs practicals), School vs department, schemes, things not on the IT site (mess, canteen, fees, directions, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer and a score per group. The grading is keyword matching, so read the answers too.
-**Result (30 Oct 2026, local Ollama model):** 43/55 before the fixes in this round → see the table in the README for the latest.
+**Result (30 Oct 2026, local Ollama model `huihui-gemma`, ~9 s per answer):**
+
+| Group (questions) | Before | After |
+|---|---|---|
+| Labs: rooms vs practicals (6) | 4 | 6 |
+| School / department name (6) | 6 | 6 |
+| Schemes (6) | 4 | 5 |
+| Not on the IT website: mess, canteen, fees, directions… (11) | 7 | 11 |
+| Where is … (5) | 5 | 5 |
+| Mandatory tasks (6) | 5 | 6 |
+| People and contacts (5) | 4 | 5 |
+| Syllabus, timetable, notices (6) | 5 | 6 |
+| Vague / typos (4) | 3 | 4 |
+| **Total (55)** | **43** | **54** |
+
+The one left ("government scholarships?") passes on some runs and not others: the small local model sometimes opens with "Yes" when the source only says "check the website for scholarship updates". A larger model (Groq / OpenRouter) should do better; re-run `scripts/eval.py` with it before the demo.
 **Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run: `uv run scripts/eval.py` (about 9 minutes on the GPU PC).
 
 ### 14. Nothing optional can crash it
