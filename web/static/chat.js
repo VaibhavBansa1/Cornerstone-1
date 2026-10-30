@@ -118,7 +118,7 @@ function renderAnswer(bubble, data) {
   });
   const more = data.sources.length - shown.length;
   if (more > 0) {
-    const all = el("button", "src-more", `+${more} more`);
+    const all = el("button", "src-more", shown.length ? `+${more} more` : `${more} sources searched`);
     all.type = "button"; all.dataset.a = idx;
     row.appendChild(all);
   }
@@ -193,7 +193,8 @@ function showSources(answerIdx, focusN, openOnMobile = true) {
     cited.forEach(s => panelBody.appendChild(sourceCard(s, true, answerIdx)));
   }
   if (others.length) {
-    panelBody.appendChild(el("div", "panel-label", data.generated ? "Also searched" : "Closest passages"));
+    panelBody.appendChild(el("div", "panel-label",
+      !data.generated ? "Closest passages" : cited.length ? "Also searched" : "Searched (none used in the answer)"));
     others.forEach(s => panelBody.appendChild(sourceCard(s, false, answerIdx)));
   }
   if (openOnMobile) openPanel();
