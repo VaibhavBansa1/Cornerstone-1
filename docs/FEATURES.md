@@ -62,6 +62,7 @@ The features are in the order a document travels through the system: collected �
 4. **Reranker**: a small model re-reads question + chunk and scores the fit, blended 50/50 with steps 1–2 so it can't overrule a strong match.
 5. **Bonuses**: newer text up to +0.15, the right batch +0.30, a different batch −0.30.
 6. **No repeats**: duplicate text is dropped; at most 2 pieces from one document; 6 pieces go to the AI.
+7. **Topic pages**: a question about labs, contacts, programmes or the department in general gets that website page *whole*, as one source (`config.TOPIC_PAGES`), because a list like "all the labs" is only useful complete. "Lab" also matches "laboratories", "dept" matches "school", and "3rd year" is searched as "5th sem".
 
 **Where:** `rag/retrieval.py`, `rag/roles.py`. See what each step did: `uv run scripts/debug_retrieval.py "your question"`.
 
@@ -73,6 +74,9 @@ The features are in the order a document travels through the system: collected �
 - course codes are batch-specific
 - if the answer isn't in the sources, say so
 - reply in the student's language (English / Hinglish / Hindi)
+- only IT-website facts: for the mess, canteen, fees, directions, other departments… say "I don't have that" and point to mitsgwalior.in (a 2019 magazine joke about mess food is not proof there is a mess)
+- never read out students' names or roll numbers from debarred / marks / attendance lists; point to the notice instead
+- "lab" can mean a room or a practical subject: list the labs and say lab courses are in each syllabus
 
 For role questions, the code first builds a **timeline** of every named person + title in the sources, newest first ("Sep 2026: Dr. Punit Kumar Johari, Dean, SOIT [1]"), and puts it at the top. Names are paired with the *nearest* title, and names inside timetable rows are ignored.
 **Where:** `SYSTEM_PROMPT` and `build_prompt()` in `rag/pipeline.py`, `rag/roles.py`. See the exact AI input: `uv run -m rag.pipeline --show-prompt "your question"`.
@@ -90,6 +94,7 @@ For role questions, the code first builds a **timeline** of every named person +
 - **Saved copy** (our downloaded file; works even if the site is down, and is the only link for admin uploads)
 
 Checked on 26 Oct 2026: 377/377 saved copies and 377/377 original links open.
+While it works, the chat shows **live progress** instead of a spinner: "Reading your question → Understood as 5th sem · 2024-28 batch", "Searching 9,348 pieces of the IT website", "Found 6 matching sources → Reading: V SEM · 2024-28 BATCH …", "Writing the answer with groq · 4 s" (and "Previous AI was busy · now asking openrouter" when it falls back). The server sends these as they happen (`/api/query/stream`).
 **Where:** `web/static/` (pages), `web/sources.py` (names, links, saved pages), `web/app.py` (URLs). Check every link: `uv run scripts/check_links.py`.
 
 ### 12. Admin page and privacy [D13 D14]
@@ -97,7 +102,13 @@ Checked on 26 Oct 2026: 377/377 saved copies and 377/377 original links open.
 **Privacy:** question and answer text is **never stored**, only counts and cited sources. Saved copies are served only from `data/raw/` and `data/uploads/`, never the index or the log.
 **Where:** `web/app.py`, `web/chatlog.py`, `web/static/admin.*`.
 
-### 13. Nothing optional can crash it
+### 13. 55 test questions, graded automatically
+**Why:** "it seems to work" isn't a measurement. Students ask weird things.
+**What:** `scripts/eval_questions.json` has 55 questions in 9 groups: labs (rooms vs practicals), School vs department, schemes, things not on the IT site (mess, canteen, fees, directions, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer and a score per group. The grading is keyword matching, so read the answers too.
+**Result (30 Oct 2026, local Ollama model):** 43/55 before the fixes in this round → see the table in the README for the latest.
+**Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run: `uv run scripts/eval.py` (about 9 minutes on the GPU PC).
+
+### 14. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. OCR not installed → scanned pages skipped with a warning. Crawl stopped → old data kept. Each case has a test in `tests/`.
 
 ---
@@ -113,7 +124,8 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 | Rebuild only (after changing settings) | `uv run run_pipeline.py --skip-crawl` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | Start the website | `uv run -m web.app` → http://localhost:5000 |
-| Check answer quality on test questions | `uv run scripts/ask_batch.py` → `data/eval_answers.md` |
+| Grade answers on the 55 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Answer your own list of questions | `uv run scripts/ask_batch.py questions.txt` → `data/eval_answers.md` |
 | Check the crawl got everything | `uv run scripts/check_crawl.py --live` |
 | See why a piece was / wasn't found | `uv run scripts/debug_retrieval.py "question" "expected text"` |
 | See exactly what the AI receives | `uv run -m rag.pipeline --show-prompt "question"` |
@@ -136,5 +148,5 @@ An earlier crawl had been stopped after 2 minutes; the complete manifest survive
 2. **Re-crawling costs time.** Re-checking only the ~30 department pages and downloading just new links (a "link diff") would make daily updates nearly free. The OCR cache already makes unchanged PDFs free.
 3. **Big Google Drive files** (over 25 MB) are skipped; 1 right now.
 4. **Follow-up questions:** each question is answered alone ("and who was before him?" won't work yet).
-5. **A fixed test set:** grow `scripts/ask_batch.py` into ~30 questions with expected answers, to measure accuracy after every change.
+5. **"This semester / my batch":** the bot doesn't know who is asking, so "this semester" gets a general answer. Asking "5th sem" or "2024 batch" works.
 6. **Admin password:** the default is `mits-admin`; set `ADMIN_PASSWORD` before any demo on a shared network.

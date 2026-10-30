@@ -25,7 +25,7 @@ A real question traced through the system. The values on the right are actual ou
 
 ## Design decisions
 
-Each row answers: what we chose, why, and what we did **not** choose.
+Each row answers: what we chose, why, and what we did **not** choose. D15–D17 came from testing with 55 real-style questions.
 
 | # | Decision | Why | Not chosen (and why not) |
 |---|---|---|---|
@@ -43,6 +43,9 @@ Each row answers: what we chose, why, and what we did **not** choose.
 | **D12** | **AI provider chain over plain HTTP.** One small interface; OpenRouter, Groq, GitHub Models, Gemini, Anthropic, OpenAI, LM Studio and Ollama are all called with `requests`. A rate-limited provider is skipped for 60 s; if none works, the matching passages are shown instead. | Free tiers have low limits, and a demo must not die on "429 Too Many Requests". No vendor SDKs to install or keep in sync. | One fixed provider (the original version). Vendor SDKs: four extra dependencies doing what one HTTP call does. |
 | **D13** | **Privacy and safety:** question and answer text is never stored (only counts and cited sources). Saved copies are served only from `data/raw/` and `data/uploads/`. Uploads and deletes need the admin password. | Students ask personal or embarrassing things. The file endpoint must never expose the index or the log. | A "recent questions" list: removed on request. |
 | **D14** | **Admin uploads go through the same pipeline** and trigger a background rebuild. | One way to index means one set of bugs. It's also the "index at upload time" pattern a college would use if this ran inside its own website. | A separate upload-only index: two code paths to keep in sync. |
+| **D15** | **Topic pages and scope rules.** Questions about labs, contacts, programmes or the department in general get that website page whole (`config.TOPIC_PAGES`); the prompt says to answer only from the IT site, never to read out students from lists, and to say which "lab" it means. | Testing showed the bot missed the Laboratories page ("labs" ≠ "laboratories"), turned a 2019 magazine joke into "yes, there is a mess", gave another college's address from a BoS member list, and listed debarred students by name. | A bigger model alone: it would still not see the Laboratories page, and a privacy rule is cheaper than trusting the model. |
+| **D16** | **Live progress while answering**: the server streams one line per step (understood, searching, sources found, which AI is writing, fallbacks) and the chat shows them as a checklist. | A 10-second wait with a spinner looks broken; showing what it's reading also builds trust. | Fake progress messages on a timer: they would lie when a step is slow. WebSockets: more moving parts than a streamed response. |
+| **D17** | **55 graded test questions** (`scripts/eval.py`) run after every change. | Each fix in D15 was found by them, and they show the fixes didn't break anything else. | Judging answers by hand each time: slow and easy to fool yourself. An AI judge: costs calls and needs its own checking. |
 
 ---
 
@@ -56,8 +59,8 @@ What each folder is for, and why each file lives where it does. The four code fo
 | `ingestion/` | **Turns files into dated chunks.** Knows about file formats and text; nothing about search or AI. | `build.py`: entry point, turns crawl + uploads into `chunks.jsonl` · `readers.py`: HTML/PDF/DOCX → text · `ocr.py`: scanned pages → text · `link_labels.py`: "CLICK HERE" → "V SEM · 2024-28 BATCH" · `dates.py`: finds dates in text · `chunking.py`: cuts text into dated chunks · `course_list.py`: course name + code lists |
 | `rag/` | **Finds and answers.** Embeddings, the index, search, prompt, AI. | `pipeline.py`: question → answer, ties the parts together · `query_understanding.py`: semester/batch/session from the question · `retrieval.py`: hybrid search and ranking · `roles.py`: who holds which post · `embeddings.py`: text → vectors (GPU/CPU) · `embed_index.py`: builds the FAISS index · `llm/`: AI providers (`base.py` interface, `http_providers.py` the HTTP calls, `registry.py` order + fallback) |
 | `web/` | **Shows it.** The website and its API. | `app.py`: the URLs (routes) only · `sources.py`: source names, links, citations, saved-page view · `chatlog.py`: usage counts (no question text) · `static/`: chat and admin pages (HTML/CSS/JS) |
-| `scripts/` | **Tools for checking the system.** Not used by the app. | `check_crawl.py`: did the crawl get everything? · `check_links.py`: does every source open? · `debug_retrieval.py`: why was a chunk (not) found? · `ask_batch.py`: answer a list of test questions into a file |
-| `tests/` | **79 automated tests**, one file per module. Run with `uv run pytest tests -q`. | `test_<module>.py` |
+| `scripts/` | **Tools for checking the system.** Not used by the app. | `check_crawl.py`: did the crawl get everything? · `check_links.py`: does every source open? · `debug_retrieval.py`: why was a chunk (not) found? · `eval.py` + `eval_questions.json`: ask and grade the 55 test questions · `ask_batch.py`: answer your own list of questions |
+| `tests/` | **82 automated tests**, one file per module. Run with `uv run pytest tests -q`. | `test_<module>.py` |
 | `docs/` | **Documentation.** | `architecture/`: this file + diagrams (`.dot` source and `.png`) · `FEATURES.md`: what each feature does, in plain words · `evaluation/`: synopsis, presentation, and `architecture_v1_original.png` (the first design, kept because the synopsis and slides use it) |
 | `data/` | **Everything the pipeline produces.** Not in git, because it's large and can be rebuilt. The repo only has an empty `data/.gitkeep` so the folder exists after cloning. | `raw/` + `manifest.json` (crawl) · `uploads/` (admin files) · `processed/` (`chunks.jsonl`, `pdf_text_cache/`) · `index/` (FAISS + chunk metadata + which model built it) · `chat_log.db` |
 | *(root)* | **Start points and settings.** | `run_pipeline.py`: crawl → chunks → index · `config.py`: every setting, each overridable by an environment variable · `pyproject.toml` + `uv.lock`: dependencies (`uv sync`) · `requirements.txt`: the same, generated from `uv.lock` for plain pip |
@@ -75,5 +78,5 @@ What each folder is for, and why each file lives where it does. The four code fo
 | Support a new file type | One function in `ingestion/readers.py` | `python run_pipeline.py --skip-crawl` |
 | Change the embedding model | `EMBEDDING_MODEL=...` | Rebuild; the index refuses a mismatched model |
 | Change chunk size, dates, course lists | `ingestion/chunking.py`, `dates.py`, `course_list.py` | Rebuild (OCR is cached, ~1 min on GPU) |
-| Tune ranking | `TITLE_WEIGHT`, `RECENCY_WEIGHT`, `BATCH_MATCH_BONUS`, `RERANKER_BLEND`, `TOP_K` in `config.py` | Restart; check with `scripts/ask_batch.py` |
+| Tune ranking | `TITLE_WEIGHT`, `RECENCY_WEIGHT`, `BATCH_MATCH_BONUS`, `RERANKER_BLEND`, `TOP_K` in `config.py` | Restart; check with `scripts/eval.py` |
 | Edit the diagrams | `architecture.dot`, `question-flow.dot` in this folder | `dot -Tpng -Gdpi=150 architecture.dot -o architecture.png` (same for the other) |
