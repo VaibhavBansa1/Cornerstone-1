@@ -203,3 +203,12 @@ def test_answer_that_cites_nothing_marks_no_source_as_used(client, monkeypatch):
     monkeypatch.setattr(pipeline, "answer", _fake_answer("groq", "I don't have information about a mess."))
     data = client.post("/api/query", json={"question": "Is there a mess?"}).get_json()
     assert data["generated"] is True and data["cited"] == []
+
+
+def test_college_site_download_links_get_the_file_name():
+    chunk = {"source_url": "https://web.mitsgwalior.in/images/Academic%20Calendar%202026.pdf", "source_type": "pdf",
+             "title": "Academic Calendar - MITS Gwalior - Download File - Academic Calendar 2026.pdf",
+             "link_label": "Download File"}
+    assert sources.source_label(chunk) == "Academic Calendar · Academic Calendar 2026.pdf"
+    chunk["link_label"] = "<download>"
+    assert sources.source_label(chunk) == "Academic Calendar · Academic Calendar 2026.pdf"

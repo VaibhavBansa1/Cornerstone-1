@@ -22,7 +22,7 @@ from rag import pipeline
 # Link texts that say nothing about the file.
 _GENERIC_LINK = re.compile(
     r"^\s*(view( more)?( details)?|more details|details|read more|click here|here|download|link|open"
-    r"|report|activity report|brochure|pdf)\s*$", re.I)
+    r"|download file|<download>|file|report|activity report|brochure|pdf)\s*$", re.I)
 
 
 def source_label(chunk: dict) -> str:

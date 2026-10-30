@@ -55,7 +55,8 @@ function renderMarkdown(text, answerIdx, valid) {
     if (line) html += `<p>${line}</p>`;
   }
   if (inList) html += "</ul>";
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+             .replace(/(^|[\s(>])\*(?!\s)([^*<]+?)\*(?=[\s.,;:)<]|$)/g, "$1<em>$2</em>");
   return citationsToHtml(html, answerIdx, valid);
 }
 
