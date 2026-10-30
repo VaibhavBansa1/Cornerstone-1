@@ -209,21 +209,93 @@ function showSources(answerIdx, focusN, openOnMobile = true) {
 function openPanel() { document.body.classList.add("panel-open"); }
 function closePanel() { document.body.classList.remove("panel-open"); }
 
+// Live progress while answering: a short checklist that fills in as the
+// server reports each step (see /api/query/stream).
+function progressView(bubble) {
+  bubble.textContent = "";
+  const list = el("ol", "progress");
+  bubble.appendChild(list);
+  const started = Date.now();
+  let current = null, timer = null;
+
+  function add(text) {
+    if (current) current.classList.replace("now", "done");
+    current = el("li", "now");
+    current.appendChild(el("span", "p-text", text));
+    list.appendChild(current);
+    scrollDown();
+    return current;
+  }
+  function detail(li, text) { li.appendChild(el("span", "p-detail", text)); scrollDown(); }
+  function stopTimer() { if (timer) clearInterval(timer); timer = null; }
+  const first = add("Reading your question");   // shown at once, before the server replies
+
+  return {
+    step(ev) {
+      if (ev.step === "understood") {
+        if (ev.value) detail(first, "Understood as: " + ev.value);
+      } else if (ev.step === "searching") {
+        add(`Searching ${Number(ev.value).toLocaleString("en-IN")} pieces of the IT website`);
+      } else if (ev.step === "found") {
+        const li = add(ev.sources.length ? `Found ${ev.sources.length} matching sources` : "No matching sources found");
+        // show the source names one by one, so it's clear what is being read
+        ev.sources.slice(0, 4).forEach((t, i) => setTimeout(() => detail(li, "Reading: " + t), 150 * i));
+        if (ev.sources.length > 4) setTimeout(() => detail(li, `+${ev.sources.length - 4} more`), 600);
+      } else if (ev.step === "writing") {
+        stopTimer();
+        const name = ev.provider.split(":")[0];
+        const li = add((ev.fallback ? "Previous AI was busy · now asking " : "Writing the answer with ") + name);
+        const secs = el("span", "p-secs", "");
+        li.appendChild(secs);
+        timer = setInterval(() => { secs.textContent = ` · ${Math.round((Date.now() - started) / 1000)} s`; }, 1000);
+      }
+    },
+    finish() { stopTimer(); },
+  };
+}
+
+// Read the progress stream; returns the final answer object.
+async function askStream(question, progress) {
+  const res = await fetch("/api/query/stream", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Something went wrong.");
+  }
+  const reader = res.body.getReader(), decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      const ev = JSON.parse(line);
+      if (ev.type === "step") progress.step(ev);
+      else if (ev.type === "answer") return ev;
+      else if (ev.type === "error") throw new Error(ev.error);
+    }
+  }
+  throw new Error("The connection closed before the answer arrived.");
+}
+
 async function ask(question) {
   addRow("me").textContent = question;
   const bubble = addRow("bot");
-  bubble.innerHTML = '<span class="typing" aria-label="Thinking"><span></span><span></span><span></span></span>';
+  const progress = progressView(bubble);
   sendBtn.disabled = true;
   try {
-    const res = await fetch("/api/query", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    const data = await askStream(question, progress);
     data.question = question;
+    progress.finish();
     renderAnswer(bubble, data);
   } catch (err) {
+    progress.finish();
     bubble.textContent = "Sorry, " + err.message;
     bubble.classList.add("error");
   } finally {

@@ -168,3 +168,23 @@ def test_question_text_is_never_stored(client, monkeypatch):
         dump = "\n".join(conn.iterdump())
     assert "embarrassing" not in dump
     assert "See [1]" not in dump
+
+
+def test_stream_sends_progress_steps_then_the_answer(client, monkeypatch):
+    import json
+
+    def answer(question, top_k=config.TOP_K, on_step=None):
+        result = _fake_answer("groq:llama", "See the timetable [2].")(question)
+        on_step("understood", "5th sem · 2024-28 batch")
+        on_step("searching", 9348)
+        on_step("found", result["sources"])
+        on_step("writing", {"provider": "groq", "after_error": None})
+        return result
+
+    monkeypatch.setattr(pipeline, "answer", answer)
+    res = client.post("/api/query/stream", json={"question": "5th sem time table"})
+    events = [json.loads(line) for line in res.get_data(as_text=True).splitlines() if line.strip()]
+    assert [e.get("step") for e in events[:-1]] == ["understood", "searching", "found", "writing"]
+    assert events[2]["sources"] == ["Syllabus IT", "tt.pdf"]
+    assert events[-1]["type"] == "answer" and events[-1]["cited"] == [2]
+    assert client.post("/api/query/stream", json={"question": " "}).status_code == 400
