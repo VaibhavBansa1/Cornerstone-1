@@ -19,11 +19,21 @@ from ingestion.dates import label as date_label
 from rag import pipeline
 
 
+# Link texts that say nothing about the file.
+_GENERIC_LINK = re.compile(
+    r"^\s*(view( more)?( details)?|more details|details|read more|click here|here|download|link|open"
+    r"|report|activity report|brochure|pdf)\s*$", re.I)
+
+
 def source_label(chunk: dict) -> str:
     """Short, human name for a source card. A file linked as "CLICK HERE"
     in a table gets its table position ("Syllabus · V SEM · 2024-28 BATCH");
     otherwise the file name for documents and the page title for pages."""
     label = (chunk.get("link_label") or "").strip()
+    if _GENERIC_LINK.match(label):  # "View More Details", "Report": the file name says more
+        page = (chunk.get("title") or "").split(" - ")[0].strip()
+        name = unquote(_name_from_title_or_url(chunk))
+        return f"{page} · {name}" if page and chunk.get("source_type") != "page" else name
     if label and chunk.get("source_type") != "page":
         page = (chunk.get("title") or "").split(" - ")[0].strip()
         if page and page.lower() not in label.lower():

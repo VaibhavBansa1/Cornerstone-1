@@ -100,8 +100,10 @@ def build_context(results: list[dict]) -> str:
 
 
 def order_for_prompt(results: list[dict]) -> list[dict]:
-    """Newest first, so the model sees current information before old."""
-    return sorted(results, key=lambda r: r.get("date") or "", reverse=True)
+    """Newest first, so the model sees current information before old.
+    A whole topic page (e.g. Laboratories, see retrieval) goes first: it is
+    undated but is the main answer to the question."""
+    return sorted(results, key=lambda r: (bool(r.get("topic_page")), r.get("date") or ""), reverse=True)
 
 
 def build_timeline(query: str, results: list[dict]) -> str:

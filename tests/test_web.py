@@ -188,3 +188,12 @@ def test_stream_sends_progress_steps_then_the_answer(client, monkeypatch):
     assert events[2]["sources"] == ["Syllabus IT", "tt.pdf"]
     assert events[-1]["type"] == "answer" and events[-1]["cited"] == [2]
     assert client.post("/api/query/stream", json={"question": " "}).status_code == 400
+
+
+def test_generic_link_text_is_replaced_by_the_file_name():
+    chunk = {"source_url": "https://web.mitsgwalior.in/uploads/op%20schedule.pdf", "source_type": "pdf",
+             "title": "Student Notices - MITS Gwalior - View More Details - op schedule.pdf",
+             "link_label": "View More Details"}
+    assert sources.source_label(chunk) == "Student Notices · op schedule.pdf"
+    chunk["link_label"] = "V SEM · 2024-28 BATCH"
+    assert sources.source_label(chunk) == "Student Notices · V SEM · 2024-28 BATCH"
