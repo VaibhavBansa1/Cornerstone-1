@@ -151,6 +151,25 @@ QUERY_SYNONYMS = {
     "syllabus": ["scheme", "curriculum"],
     "sem": ["semester"],
     "prof": ["professor"],
+    "lab": ["laboratory", "laboratories"],
+    "labs": ["lab", "laboratory", "laboratories"],
+    "dept": ["department"],
+    "department": ["school"],
+    "school": ["department"],
+    "expert": ["industry person"],
+    "experts": ["industry person"],
+    "mandatory": ["compulsory", "mandatory workshop", "audit"],
+    "compulsory": ["mandatory"],
+}
+
+# Questions about these topics always search the matching page of the
+# department website too (topic found by rag/query_understanding.py),
+# e.g. "what labs are there?" -> the "Laboratories" page.
+TOPIC_PAGES = {
+    "labs": "Laboratories",
+    "contacts": "Contacts",
+    "overview": "School of Information Technology",
+    "programmes": "Programmes Offered",
 }
 
 # --- Answer generation (LLM) ---------------------------------------------------

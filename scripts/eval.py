@@ -28,8 +28,8 @@ REPORT = config.DATA_DIR / "eval_report.md"
 
 # How the bot says "I don't know" (English and Hinglish).
 UNKNOWN = re.compile(
-    r"not (in|mentioned in|available in|found in|covered (in|by)) (the |these |our |any )?(provided )?sources"
-    r"|(do not|don't|does not|doesn't) (have|contain|mention|include|cover)"
+    r"not (explicitly |specifically )?(in|mentioned|available|found|covered|listed|given|specified)"
+    r"|(do not|don't|does not|doesn't) (explicitly |specifically )?(have|contain|mention|include|cover|specify|list)"
     r"|(no|not any) (information|details|mention|data)"
     r"|could ?n[o']t find|cannot find|can't find|unable to find|not able to find"
     r"|i (don't|do not) know|not sure"

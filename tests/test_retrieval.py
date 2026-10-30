@@ -186,3 +186,29 @@ def test_understood_batch_wins_over_other_batches_and_its_course_list_is_include
     assert results[0]["batch_bonus"] > 0
     other = [r for r in results if r["link_label"] == "V SEM · 2023-27 BATCH"]
     assert all(r["batch_bonus"] < 0 for r in other)
+
+
+def test_topic_question_gets_the_whole_topic_page_as_one_source():
+    from rag.query_understanding import understand
+
+    page = [{"source_url": "https://x/labs", "source_type": "page", "title": "Laboratories - MITS Gwalior",
+             "chunk_index": i, "date": None, "text": t}
+            for i, t in enumerate(["Laboratories\nData Science Lab is for Python.\nProgramming Lab",
+                                   "Programming Lab is for C.\nResearch Lab",
+                                   "Research Lab is for projects."])]
+    other = [_chunk("Lab timetable: DS LAB on Monday", "2026-07-01")]
+    q = "what are all the labs?"
+    results = HybridRetriever(page + other).search(q, top_k=3, today=TODAY, understanding=understand(q, TODAY))
+    assert results[0]["title"] == "Laboratories - MITS Gwalior"
+    text = results[0]["text"]
+    assert all(name in text for name in ("Data Science Lab", "Programming Lab is", "Research Lab is"))
+    assert text.count("Programming Lab\n") == 1          # overlap between pieces not repeated
+    assert sum(r["source_url"] == "https://x/labs" for r in results) == 1
+
+
+def test_year_of_study_is_searched_as_its_semester():
+    from rag.query_understanding import understand
+
+    u = understand("3rd year ka time table", date(2026, 10, 30))
+    assert u.semester == 5 and u.rewrite("3rd year ka time table") == "5th sem ka time table"
+    assert understand("5th sem syllabus", date(2026, 10, 30)).rewrite("5th sem syllabus") == "5th sem syllabus"
