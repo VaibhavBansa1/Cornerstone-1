@@ -12,6 +12,7 @@ chatbot still works fully offline.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import date
 
@@ -63,10 +64,10 @@ Answer ONLY from the numbered sources below. Each source shows a date: the newes
 
 Rules:
 1. Facts change over time: who holds a post (HOD / Head / Dean / coordinator), timetables, syllabus, notices. When sources disagree, trust the most recent dated source and say "as of <month year>". Mention people from older sources only as former holders ("previously ..."), never as current. If a source says someone held a post "from X to Y", that person no longer holds it after Y.
-2. The same post can have different titles in different years (e.g. "HoD", "Professor & Head", "Dean, School of IT"). Use the exact title the newest source uses, and mention if the title changed.
+2. The same post can have different titles in different years (e.g. "HoD", "Professor & Head", "Dean, School of IT"). Since MITS became a Deemed University, the IT department is the School of IT and its head is the Dean, School of IT: a question about the HOD / head of IT means the newest person named as Dean or Head of the School of IT. Use the exact title the newest source uses, mention that it used to be called HoD, and name earlier HoDs only as previous.
 3. If the sources do not contain the answer, say so plainly and suggest contacting the department office. Never guess names, dates or numbers.
 4. Cite sources with their [n] markers.
-5. If a "Timeline" is given at the top, use it to decide who is current: the top line is the newest. Lines with different titles can be different posts; say so instead of mixing them up.
+5. If a "Timeline" is given at the top, use it to decide who is current: the top line is the newest. Coordinator posts (time table, class, exam) are different posts from the head; don't mix them up.
 6. Batches: "2024-28 batch" = students admitted in 2024. {batch_guide} A question like "5th sem syllabus" without a year means the batch that is in 5th sem now; "2025 students" means the 2025-29 batch. If "Question understood as" is given at the top, answer for that batch and semester; use other batches' sources only if nothing else exists, and then say which batch they are for.
 7. Each batch has its own syllabus and course codes. Course codes changed when MITS became a Deemed University (older 7-digit codes like 3160512, newer 8-digit codes like 16243101), so the same subject can have different codes in different batches. Quote course codes exactly as written in the source for the batch asked about; never copy a code from another batch's document. If a "Course list" source is given, use it for "which subjects" questions and list every course in it.
 8. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi words typed in English letters, e.g. "kaun hai", "kya facilities hai") -> Hinglish answer, also in English letters, never in Devanagari script; Hindi in Devanagari -> Hindi. Keep it short and clear.
@@ -132,11 +133,20 @@ def build_prompt(query: str, results: list[dict], today: date | None = None,
     return system, f"{head_text}Sources:\n{context}\n\nQuestion: {query}"
 
 
+_ODD_CITATION = re.compile(r"【\s*(\d+)[^】]*】|\[(\d+)†[^\]]*\]")
+
+
+def clean_citations(text: str) -> str:
+    """Some models cite as 【4†L1-L3】; the chat page understands [4]."""
+    return _ODD_CITATION.sub(lambda m: f"[{m.group(1) or m.group(2)}]", text)
+
+
 def generate_answer(query: str, results: list[dict], today: date | None = None,
                     understanding: Understanding | None = None, on_attempt=None) -> llm.Reply:
     system, user_message = build_prompt(query, results, today, understanding)
     context = build_context(results)
     reply = llm.generate(system, user_message, on_attempt=on_attempt)
+    reply.text = clean_citations(reply.text)
     if not reply.generated:
         why = "; ".join(reply.errors) or "no LLM provider is configured or reachable"
         reply.text = f"[No generated answer ({why}) -- showing the most relevant passages]\n\n{context}"

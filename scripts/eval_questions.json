@@ -102,6 +102,10 @@
    "expect": "answer",
    "must": [
     "johari"
+   ],
+   "not": [
+    "(hod|head)[^.\\n]{0,80}\\bis\\s+(\\*\\*)?dr\\.?\\s*sanjiv",
+    "\\bsanjiv sharma\\b[^.\\n]{0,40}\\bis the (current )?(hod|head)"
    ]
   },
   {
@@ -511,6 +515,10 @@
    "expect": "answer",
    "must": [
     "johari"
+   ],
+   "not": [
+    "(hod|head)[^.\\n]{0,80}\\bis\\s+(\\*\\*)?dr\\.?\\s*sanjiv",
+    "\\bsanjiv sharma\\b[^.\\n]{0,40}\\bis the (current )?(hod|head)"
    ]
   },
   {
@@ -625,6 +633,10 @@
    "expect": "answer",
    "must": [
     "johari"
+   ],
+   "not": [
+    "(hod|head)[^.\\n]{0,80}\\bis\\s+(\\*\\*)?dr\\.?\\s*sanjiv",
+    "\\bsanjiv sharma\\b[^.\\n]{0,40}\\bis the (current )?(hod|head)"
    ]
   },
   {

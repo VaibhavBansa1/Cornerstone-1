@@ -39,12 +39,26 @@ function citationsToHtml(html, answerIdx, valid) {
   });
 }
 
-// Small, safe Markdown subset: paragraphs, bullet lists, **bold**.
+// Small, safe Markdown subset: paragraphs, bullet lists, tables, **bold**, *italic*.
 function renderMarkdown(text, answerIdx, valid) {
   const lines = escapeHtml(text.trim()).split(/\n/);
-  let html = "", inList = false;
+  let html = "", inList = false, table = null;
+  const flushTable = () => {
+    if (!table) return;
+    const [head, ...body] = table;
+    html += '<div class="table-wrap"><table><thead><tr>' + head.map(c => `<th>${c}</th>`).join("") + "</tr></thead><tbody>" +
+            body.map(r => "<tr>" + r.map(c => `<td>${c}</td>`).join("") + "</tr>").join("") + "</tbody></table></div>";
+    table = null;
+  };
   for (const raw of lines) {
     const line = raw.trim();
+    if (/^\|.*\|$/.test(line)) {                       // table row
+      if (inList) { html += "</ul>"; inList = false; }
+      if (/^\|[\s:|-]+\|$/.test(line)) continue;       // |---|---| separator
+      (table = table || []).push(line.slice(1, -1).split("|").map(c => c.trim()));
+      continue;
+    }
+    flushTable();
     const bullet = line.match(/^[*\-•]\s+(.*)/);
     if (bullet) {
       if (!inList) { html += "<ul>"; inList = true; }
@@ -54,6 +68,7 @@ function renderMarkdown(text, answerIdx, valid) {
     if (inList) { html += "</ul>"; inList = false; }
     if (line) html += `<p>${line}</p>`;
   }
+  flushTable();
   if (inList) html += "</ul>";
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
              .replace(/(^|[\s(>])\*(?!\s)([^*<]+?)\*(?=[\s.,;:)<]|$)/g, "$1<em>$2</em>");

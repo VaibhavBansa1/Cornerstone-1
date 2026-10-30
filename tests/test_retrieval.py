@@ -212,3 +212,10 @@ def test_year_of_study_is_searched_as_its_semester():
     u = understand("3rd year ka time table", date(2026, 10, 30))
     assert u.semester == 5 and u.rewrite("3rd year ka time table") == "5th sem ka time table"
     assert understand("5th sem syllabus", date(2026, 10, 30)).rewrite("5th sem syllabus") == "5th sem syllabus"
+
+
+def test_odd_citation_styles_become_numbers():
+    from rag.pipeline import clean_citations
+
+    assert clean_citations("Head is X【4†L1-L3】 and Y [2†L9].") == "Head is X[4] and Y [2]."
+    assert clean_citations("plain [1] stays") == "plain [1] stays"
