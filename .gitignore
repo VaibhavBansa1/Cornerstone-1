@@ -21,3 +21,4 @@ data/eval/
 data/eval_report.md
 data/*.log
 data/*.err
+data/*.mp4

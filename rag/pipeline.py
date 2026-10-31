@@ -18,7 +18,7 @@ from datetime import date
 
 import config
 from ingestion.dates import label as date_label
-from rag import llm
+from rag import followup, llm
 from rag.query_understanding import Understanding, semester_of, session_start_year, understand
 from rag.retrieval import HybridRetriever, load_retriever
 from rag.roles import role_timeline
@@ -116,8 +116,10 @@ def build_timeline(query: str, results: list[dict]) -> str:
 
 
 def build_prompt(query: str, results: list[dict], today: date | None = None,
-                 understanding: Understanding | None = None) -> tuple[str, str]:
-    """(system prompt, user message) exactly as the LLM will see them."""
+                 understanding: Understanding | None = None, asked_as: str | None = None) -> tuple[str, str]:
+    """(system prompt, user message) exactly as the LLM will see them.
+    ``asked_as``: the student's own words when ``query`` is a follow-up
+    rewritten to stand on its own (the reply keeps the student's language)."""
     context = build_context(results)
     timeline = build_timeline(query, results)
     system = SYSTEM_PROMPT.format(
@@ -130,6 +132,10 @@ def build_prompt(query: str, results: list[dict], today: date | None = None,
     if timeline:  # first: small models weigh what they read first
         head.append(timeline)
     head_text = "\n\n".join(head) + "\n\n" if head else ""
+    if asked_as and asked_as != query:
+        return system, (f"{head_text}Sources:\n{context}\n\n"
+                        f"This is a follow-up in a conversation. The student wrote: {asked_as}\n"
+                        f"Question (complete): {query}")
     return system, f"{head_text}Sources:\n{context}\n\nQuestion: {query}"
 
 
@@ -142,8 +148,9 @@ def clean_citations(text: str) -> str:
 
 
 def generate_answer(query: str, results: list[dict], today: date | None = None,
-                    understanding: Understanding | None = None, on_attempt=None) -> llm.Reply:
-    system, user_message = build_prompt(query, results, today, understanding)
+                    understanding: Understanding | None = None, on_attempt=None,
+                    asked_as: str | None = None) -> llm.Reply:
+    system, user_message = build_prompt(query, results, today, understanding, asked_as)
     context = build_context(results)
     reply = llm.generate(system, user_message, on_attempt=on_attempt)
     reply.text = clean_citations(reply.text)
@@ -153,13 +160,24 @@ def generate_answer(query: str, results: list[dict], today: date | None = None,
     return reply
 
 
-def answer(query: str, top_k: int = config.TOP_K, on_step=None) -> dict:
+def answer(query: str, top_k: int = config.TOP_K, on_step=None, history=None) -> dict:
     """on_step(kind, data), if given, is called as each step starts, so the
-    chat page can show progress: "understood", "searching", "found" (the
-    results), "writing" (provider name; called again if it falls back)."""
+    chat page can show progress: "rewritten" (a follow-up made complete),
+    "understood", "searching", "found" (the results), "writing" (provider
+    name; called again if it falls back).
+    ``history``: earlier questions and answers of this chat session, sent by
+    the browser ([{"q", "a"}], newest last); never stored."""
     def step(kind, data=None):
         if on_step:
             on_step(kind, data)
+
+    # Follow-up? Make it a complete question first ("and before him?" ->
+    # "Who was the HOD of IT before Dr. X?"), then work with that.
+    asked = query
+    if history:
+        query = followup.standalone(query, history)
+        if query != asked:
+            step("rewritten", query)
 
     # Step 0: what is this about? (semester, batch, session, topic)
     understanding = understand(query)
@@ -167,10 +185,11 @@ def answer(query: str, top_k: int = config.TOP_K, on_step=None) -> dict:
     step("searching", len(_get_retriever().chunks))
     results = order_for_prompt(retrieve(query, top_k=top_k, understanding=understanding))
     step("found", results)
-    reply = generate_answer(query, results, understanding=understanding,
+    reply = generate_answer(query, results, understanding=understanding, asked_as=asked,
                             on_attempt=lambda name, error: step("writing", {"provider": name, "after_error": error}))
     return {
-        "query": query,
+        "query": asked,
+        "rewritten": query if query != asked else "",
         "answer": reply.text,
         "sources": results,
         "provider": reply.provider,
