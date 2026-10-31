@@ -3,7 +3,7 @@
     python -m web.app          # then open http://localhost:5000
 
 Endpoints:
-    POST   /api/query              {"question": "..."} -> answer + sources
+    POST   /api/query              {"question": "...", "history": [{"q", "a"}]} -> answer + sources
     POST   /api/query/stream       same, with progress lines first (chat page)
     GET    /api/status             index / generation backend readiness
     GET    /api/documents          what is currently indexed
@@ -29,7 +29,7 @@ from werkzeug.utils import secure_filename
 import config
 from ingestion.dates import label as date_label
 from ingestion.build import build_chunks, write_chunks
-from rag import llm, pipeline
+from rag import followup, llm, pipeline
 from rag.embed_index import build_index, read_index_info
 from rag.embeddings import resolve_device
 from rag.retrieval import IndexMismatchError
@@ -115,6 +115,17 @@ def status():
     )
 
 
+def _history():
+    """Earlier turns of this chat, sent by the browser (never stored)."""
+    raw = (request.get_json(silent=True) or {}).get("history")
+    return followup.clean_history(raw if isinstance(raw, list) else [])
+
+
+def _answer_kwargs() -> dict:
+    history = _history()
+    return {"history": history} if history else {}
+
+
 def _check_query():
     """(question, error response or None)"""
     question = ((request.get_json(silent=True) or {}).get("question") or "").strip()
@@ -146,6 +157,8 @@ def _answer_payload(result: dict, elapsed_ms: int) -> dict:
         "response_ms": elapsed_ms,
         # e.g. "5th sem · 2024-28 batch · July-Dec 2026 session · syllabus"
         "understood_as": result.get("understood_as") or "",
+        # a follow-up made complete, e.g. "Who was the HOD of IT before Dr. X?"
+        "rewritten": result.get("rewritten") or "",
     }
 
 
@@ -156,7 +169,7 @@ def query():
         return error
     started = time.perf_counter()
     try:
-        result = pipeline.answer(question)
+        result = pipeline.answer(question, **_answer_kwargs())
     except IndexMismatchError as exc:
         return jsonify({"error": str(exc)}), 503
     return jsonify(_answer_payload(result, int((time.perf_counter() - started) * 1000)))
@@ -179,11 +192,12 @@ def query_stream():
     if error:
         return error
     events: queue.Queue = queue.Queue()
+    kwargs = _answer_kwargs()  # read the request here, not in the worker thread
 
     def work():
         started = time.perf_counter()
         try:
-            result = pipeline.answer(question, on_step=lambda k, d: events.put(_step_event(k, d)))
+            result = pipeline.answer(question, on_step=lambda k, d: events.put(_step_event(k, d)), **kwargs)
             events.put({"type": "answer", **_answer_payload(result, int((time.perf_counter() - started) * 1000))})
         except Exception as exc:
             log.exception("Answering failed")

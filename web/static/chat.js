@@ -7,6 +7,7 @@ const $ = id => document.getElementById(id);
 const messages = $("messages"), form = $("composer"), input = $("q"), sendBtn = $("send");
 const panel = $("panel"), panelBody = $("panelBody"), panelSub = $("panelSub"), scrim = $("scrim");
 const answers = [];          // response data per bot message, so any message's sources can be reopened
+const history = [];          // this chat's last few questions + answers, for follow-ups; memory only, gone on reload
 let activeAnswer = null;
 
 const TYPE_LABEL = { page: "Web page", pdf: "PDF", upload: "Uploaded doc", image: "Image",
@@ -100,10 +101,11 @@ function renderAnswer(bubble, data) {
   bubble.textContent = "";
   bubble.dataset.answer = idx;
 
-  if (data.understood_as) {
+  if (data.understood_as || data.rewritten) {
     const u = el("div", "understood");
     u.appendChild(el("span", "u-label", "Understood as"));
-    u.appendChild(document.createTextNode(" " + data.understood_as));
+    const parts = [data.rewritten ? "“" + data.rewritten + "”" : "", data.understood_as].filter(Boolean);
+    u.appendChild(document.createTextNode(" " + parts.join(" · ")));
     u.title = "How the question was read before searching. Add a batch (e.g. \"2024-28 batch\") or semester to change it.";
     bubble.appendChild(u);
   }
@@ -249,7 +251,9 @@ function progressView(bubble) {
 
   return {
     step(ev) {
-      if (ev.step === "understood") {
+      if (ev.step === "rewritten") {
+        detail(first, "Follow-up read as: " + ev.value);
+      } else if (ev.step === "understood") {
         if (ev.value) detail(first, "Understood as: " + ev.value);
       } else if (ev.step === "searching") {
         add(`Searching ${Number(ev.value).toLocaleString("en-IN")} pieces of the MITS website`);
@@ -275,7 +279,7 @@ function progressView(bubble) {
 async function askStream(question, progress) {
   const res = await fetch("/api/query/stream", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history: history.slice(-3) }),
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
@@ -311,6 +315,10 @@ async function ask(question) {
     data.question = question;
     progress.finish();
     renderAnswer(bubble, data);
+    if (data.generated) {
+      history.push({ q: question, a: (data.answer || "").slice(0, 500) });
+      if (history.length > 3) history.shift();
+    }
   } catch (err) {
     progress.finish();
     bubble.textContent = "Sorry, " + err.message;

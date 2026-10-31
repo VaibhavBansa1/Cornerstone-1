@@ -212,3 +212,22 @@ def test_college_site_download_links_get_the_file_name():
     assert sources.source_label(chunk) == "Academic Calendar · Academic Calendar 2026.pdf"
     chunk["link_label"] = "<download>"
     assert sources.source_label(chunk) == "Academic Calendar · Academic Calendar 2026.pdf"
+
+
+def test_stream_passes_history_and_reports_the_rewritten_question(client, monkeypatch):
+    import json
+    got = {}
+
+    def answer(question, top_k=config.TOP_K, on_step=None, history=None):
+        got["history"] = history
+        on_step("rewritten", "Who was the HOD before Dr. X?")
+        result = _fake_answer("groq", "Dr. Y [1].")(question)
+        result["rewritten"] = "Who was the HOD before Dr. X?"
+        return result
+
+    monkeypatch.setattr(pipeline, "answer", answer)
+    body = {"question": "and before him?", "history": [{"q": "Who is the HOD?", "a": "Dr. X [1]."}, "junk"]}
+    events = [json.loads(l) for l in client.post("/api/query/stream", json=body).get_data(as_text=True).splitlines() if l]
+    assert got["history"] == [{"q": "Who is the HOD?", "a": "Dr. X [1]."}]
+    assert events[0] == {"type": "step", "step": "rewritten", "value": "Who was the HOD before Dr. X?"}
+    assert events[-1]["rewritten"] == "Who was the HOD before Dr. X?"
