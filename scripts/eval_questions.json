@@ -1,5 +1,5 @@
 {
- "_how": "expect = answer | unknown | either. must = every pattern must appear; any = at least min_any of these must appear (default 1); not = none may appear. Patterns are case-insensitive regex. Facts checked against data/processed/chunks.jsonl (Oct 2026 crawl).",
+ "_how": "expect = answer | unknown | either. must = every pattern must appear; any = at least min_any of these must appear (default 1); not = none may appear. Patterns are case-insensitive regex. Facts checked against data/processed/chunks.jsonl (Oct 2026 crawl). history = earlier turns of the same chat [{q, a}] for follow-up questions.",
  "questions": [
   {
    "id": "lab1",
@@ -729,6 +729,63 @@
    ],
    "any": [
     "a\\+\\+"
+   ]
+  },
+  {
+   "id": "fu1",
+   "cat": "Follow-up questions",
+   "history": [
+    {
+     "q": "Who is the HOD of IT department?",
+     "a": "The head of the IT department (now the School of Information Technology) is Dr. Punit Kumar Johari, Dean, School of Information Technology."
+    }
+   ],
+   "q": "and who was before him?",
+   "expect": "answer",
+   "any": [
+    "Akhilesh Tiwari",
+    "Sanjiv Sharma"
+   ]
+  },
+  {
+   "id": "fu2",
+   "cat": "Follow-up questions",
+   "history": [
+    {
+     "q": "fifth semester syllabus 2026",
+     "a": "5th semester syllabus for the 2024-28 batch (July-Dec 2026): Mobile Computing & Wireless Network, Theory of Computation, Soft Computing Techniques, Network & Web Security ..."
+    }
+   ],
+   "q": "aur 3rd sem ka?",
+   "expect": "answer",
+   "any": [
+    "16252101",
+    "Transforms and Vector Calculus",
+    "Analysis of Algorithms",
+    "Database Management"
+   ]
+  },
+  {
+   "id": "fu3",
+   "cat": "Follow-up questions",
+   "history": [
+    {
+     "q": "What is the minimum attendance required?",
+     "a": "The minimum attendance is 75% in each course during a semester."
+    }
+   ],
+   "q": "what happens if I have less than that?",
+   "expect": "answer",
+   "must": [
+    "75"
+   ],
+   "any": [
+    "not (be )?allowed",
+    "barred",
+    "debarred",
+    "detain",
+    "not eligible",
+    "cannot appear"
    ]
   }
  ]

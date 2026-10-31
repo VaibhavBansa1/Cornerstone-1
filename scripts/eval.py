@@ -105,13 +105,13 @@ def main():
         if pause and n:
             time.sleep(pause)
         started = time.perf_counter()
-        r = answer(item["q"])
+        r = answer(item["q"], history=item.get("history"))
         secs = time.perf_counter() - started
         ok, why = grade(item, r["answer"])
         results.append({
             "id": item["id"], "cat": item["cat"], "q": item["q"], "expect": item["expect"],
             "pass": ok, "why": why, "secs": round(secs, 1), "provider": r["provider"],
-            "understood_as": r["understood_as"], "answer": r["answer"].strip(),
+            "understood_as": r["understood_as"], "rewritten": r.get("rewritten", ""), "answer": r["answer"].strip(),
             "sources": [s.get("title") or s["source_url"] for s in r["sources"]],
         })
         print(f"{'PASS' if ok else 'FAIL'}  {secs:5.1f}s  {item['id']:6s} {item['q']}  ({why})", flush=True)
