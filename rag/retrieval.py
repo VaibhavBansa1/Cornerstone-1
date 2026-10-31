@@ -27,6 +27,9 @@ How it works, step by step:
 9. **Topic page** -- questions about labs, contacts, programmes or the
    department in general always include that website page
    (``config.TOPIC_PAGES``).
+10. **Whole document** -- if the best few matches all come from one
+   document, that document is given whole (when it is small enough), so a
+   list can be counted or compared instead of seen in two pieces.
 
 BM25, the reranker and the retriever are separate classes, so any of them
 can be replaced (e.g. a different reranker) without touching the others.
@@ -181,6 +184,9 @@ class HybridRetriever:
         # otherwise long meeting minutes that mention "syllabus" 20 times win.
         w = max(1, config.TITLE_WEIGHT)
         self.bm25 = BM25([f"{(c.get('title', '') + ' ') * w}\n{c['text']}" for c in chunks])
+        self._by_source: dict[str, list[dict]] = defaultdict(list)
+        for c in chunks:
+            self._by_source[c["source_url"]].append(c)
 
     def _vector_search(self, query: str, top_n: int) -> list[tuple[int, float]]:
         if self.index is None or self.embedder is None:
@@ -253,6 +259,21 @@ class HybridRetriever:
                 break
         return picked
 
+    def _whole(self, parts: list[dict], **flags) -> dict | None:
+        """Pieces of one page/PDF joined back into one source (overlaps removed)."""
+        parts = sorted((c for c in parts if c.get("chunk_index", 0) >= 0), key=lambda c: c.get("chunk_index", 0))
+        if not parts:
+            return None
+        text = parts[0]["text"]
+        for c in parts[1:]:  # chunks overlap: skip the repeated start
+            nxt = c["text"]
+            cut = next((k for k in range(min(len(text), len(nxt), 400), 20, -1) if text.endswith(nxt[:k])), 0)
+            text += "\n" + nxt[cut:]
+        merged = dict(parts[0], text=text, relevance=1.0, recency_bonus=0.0, batch_bonus=0.0,
+                      newest_role_mention=False, **flags)
+        merged["score"] = 1.0
+        return merged
+
     def _topic_page(self, understanding) -> dict | None:
         """The whole website page for the question's topic ("labs" -> the
         Laboratories page) as ONE source, see config.TOPIC_PAGES. These
@@ -260,19 +281,24 @@ class HybridRetriever:
         page = config.TOPIC_PAGES.get(getattr(understanding, "topic", None) or "")
         if not page:
             return None
-        parts = [c for c in self.chunks if c.get("title") == f"{page} - MITS Gwalior" and c.get("chunk_index", 0) >= 0]
-        if not parts:
+        return self._whole([c for c in self.chunks if c.get("title") == f"{page} - MITS Gwalior"], topic_page=True)
+
+    def _whole_document(self, scored: list) -> dict | None:
+        """If the best few matches all come from ONE document, the question is
+        about that document: return all of it as one source (if it is small
+        enough), so lists can be counted and compared, not seen in pieces."""
+        top = [c for _, c in scored[:config.WHOLE_DOC_TOP_MATCHES]]
+        if len(top) < config.WHOLE_DOC_TOP_MATCHES or len({c["source_url"] for c in top}) != 1:
             return None
-        parts.sort(key=lambda c: c.get("chunk_index", 0))
-        text = parts[0]["text"]
-        for c in parts[1:]:  # chunks overlap: skip the repeated start
-            nxt = c["text"]
-            cut = next((k for k in range(min(len(text), len(nxt), 400), 20, -1) if text.endswith(nxt[:k])), 0)
-            text += "\n" + nxt[cut:]
-        merged = dict(parts[0], text=text, relevance=1.0, recency_bonus=0.0, batch_bonus=0.0,
-                      newest_role_mention=False, topic_page=True)
-        merged["score"] = 1.0
-        return merged
+        url = top[0]["source_url"]
+        parts = self._by_source.get(url, [])
+        if sum(len(c["text"]) for c in parts) > config.WHOLE_DOC_MAX_CHARS * 1.2:  # overlaps are removed later
+            return None
+        doc = self._whole(parts, whole_document=True)
+        if doc is None or len(doc["text"]) > config.WHOLE_DOC_MAX_CHARS:
+            return None
+        doc["date"] = top[0].get("date")
+        return doc
 
     def search(self, query: str, top_k: int = config.TOP_K, today: date | None = None,
                understanding=None) -> list[dict]:
@@ -351,8 +377,8 @@ class HybridRetriever:
             results.append(c)
         results.sort(key=lambda c: c["score"], reverse=True)
 
-        page = self._topic_page(understanding)
-        if page is not None:  # the whole topic page replaces its pieces
+        page = self._topic_page(understanding) or self._whole_document(scored)
+        if page is not None:  # the whole page/document replaces its pieces
             results = [page] + [c for c in results if c["source_url"] != page["source_url"]][:top_k - 1]
         return results
 
