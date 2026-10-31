@@ -55,3 +55,13 @@ def test_pipeline_searches_with_the_rewritten_question(monkeypatch):
 def test_follow_up_prompt_keeps_the_students_own_words():
     _, user = pipeline.build_prompt("Who was the HOD before Dr. X?", [], asked_as="aur unse pehle?")
     assert "The student wrote: aur unse pehle?" in user and "Question (complete): Who was the HOD before Dr. X?" in user
+
+
+def test_answers_to_english_letter_questions_are_asked_for_in_english_letters():
+    from rag.pipeline import build_prompt, script_reminder
+
+    assert "English letters" in script_reminder("canteen me kya kya milta hai?")
+    assert script_reminder("कैंटीन में क्या मिलता है?") == ""
+    system, user = build_prompt("canteen me kya milta hai?", [])
+    assert user.rstrip().endswith("English or Hinglish.)")
+    assert "classroom of that class" in system and "another department" in system
