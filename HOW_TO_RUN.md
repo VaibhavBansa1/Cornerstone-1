@@ -15,6 +15,8 @@ powershell -ExecutionPolicy Bypass -File .\run_demo.ps1
 4. The browser opens `http://localhost:5000` by itself. Ask a question.
 5. To stop: close the PowerShell window (or press Ctrl+C).
 
+**To start it again later (next day, after a restart, after `git pull`): run the same command.** The script checks what is already installed and skips it, so it only starts the chatbot (about a minute). Nothing is installed twice.
+
 | You have | First run | Later runs |
 |---|---|---|
 | **The full folder** (zip with `data\` and `models\`) | 3-10 min: installs Python + libraries | about 1 min |
