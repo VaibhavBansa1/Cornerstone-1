@@ -22,3 +22,9 @@ data/eval_report.md
 data/*.log
 data/*.err
 data/*.mp4
+
+# demo package
+models/
+*.err
+*.zip
+data/try*
