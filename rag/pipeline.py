@@ -71,7 +71,7 @@ Rules:
 6. Batches: "2024-28 batch" = students admitted in 2024. {batch_guide} A question like "5th sem syllabus" without a year means the batch that is in 5th sem now; "2025 students" means the 2025-29 batch. If "Question understood as" is given at the top, answer for that batch and semester; use other batches' sources only if nothing else exists, and then say which batch they are for.
 7. Each batch has its own syllabus and course codes. Course codes changed when MITS became a Deemed University (older 7-digit codes like 3160512, newer 8-digit codes like 16243101), so the same subject can have different codes in different batches. Quote course codes exactly as written in the source for the batch asked about; never copy a code from another batch's document. If a "Course list" source is given, use it for "which subjects" questions and list every course in it.
 8. Reply in the same language and script the student used: English question -> English answer; Hinglish (Hindi words typed in English letters, e.g. "kaun hai", "kya facilities hai") -> Hinglish answer, also in English letters, never in Devanagari script; Hindi in Devanagari -> Hindi. Keep it short and clear.
-9. Your sources are the IT department's website (the department is now called the School of Information Technology, SoIT; "department", "dept" and "school" mean the same) plus a set of college-wide pages: rules and ordinances, academic calendar, exams, fees, admissions, hostels, library, student cells, placement and notices. If the sources don't answer the question (other departments' details, transport, directions, general knowledge...), say you don't have that information and suggest the main MITS website (mitsgwalior.in) or the department office. A passing mention is not an answer: a student magazine article, a project title or a line in someone's profile does not tell you what the college has today. Addresses and phone numbers in lists of committee or Board of Studies members belong to those members' own institutions, not MITS; never work out directions or addresses yourself; only repeat what a source says about MITS itself. If a source only says "check the website for X", say exactly that and add no details of your own.
+9. Your sources are the IT department's website (the department is now called the School of Information Technology, SoIT; "department", "dept" and "school" mean the same) plus a set of college-wide pages: rules and ordinances, academic calendar, exams, fees, admissions, hostels, library, student cells, placement and notices. If the sources don't answer the question (other departments' details, transport, directions, general knowledge...), say you don't have that information and suggest the main MITS website (mitsgwalior.in) or the department office. A passing mention is not an answer: a student magazine article, a project title or a line in someone's profile does not tell you what the college has today. Addresses and phone numbers in lists of committee or Board of Studies members belong to those members' own institutions, not MITS; never work out directions or addresses yourself; only repeat what a source says about MITS itself. If a source only says "check the website for X", say exactly that and add no details of your own. Never name the head, faculty or rooms of another department (CSE, ECE, ...) even if an old source mentions one: say that department is not covered. A room number in a timetable (e.g. "Room No.: SH-5") is the classroom of that class, not anyone's office or cabin.
 10. Never list individual students' names, roll numbers, marks or attendance from lists (debarred lists, marks, attendance sheets). Say which notice contains it and that the student should check their own roll number there.
 11. "Lab" can mean a physical laboratory of the department or a lab course (practical subject) in a semester. If the question doesn't make clear which, list the department's laboratories and add one line saying that each semester's lab courses are in its syllabus.
 12. If the question is very broad ("tell me everything"), give a short overview from the sources and suggest two or three specific questions the student could ask.
@@ -137,8 +137,19 @@ def build_prompt(query: str, results: list[dict], today: date | None = None,
     if asked_as and asked_as != query:
         return system, (f"{head_text}Sources:\n{context}\n\n"
                         f"This is a follow-up in a conversation. The student wrote: {asked_as}\n"
-                        f"Question (complete): {query}")
-    return system, f"{head_text}Sources:\n{context}\n\nQuestion: {query}"
+                        f"Question (complete): {query}{script_reminder(asked_as)}")
+    return system, f"{head_text}Sources:\n{context}\n\nQuestion: {query}{script_reminder(query)}"
+
+
+_DEVANAGARI = re.compile(r"[\u0900-\u097F]")
+
+
+def script_reminder(question: str) -> str:
+    """Rule 8 again, at the end where models weigh it most: a question typed in
+    English letters (English or Hinglish) gets its answer in English letters."""
+    if _DEVANAGARI.search(question):
+        return ""
+    return "\n(Write the answer in English letters only, in the student's own language: English or Hinglish.)"
 
 
 _ODD_CITATION = re.compile(r"【\s*(\d+)[^】]*】|\[(\d+)†[^\]]*\]")

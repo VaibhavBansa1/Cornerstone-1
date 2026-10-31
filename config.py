@@ -227,8 +227,10 @@ QUERY_SYNONYMS = {
     "school": ["department"],
     "expert": ["industry person"],
     "experts": ["industry person"],
-    "mandatory": ["compulsory", "mandatory workshop", "audit"],
-    "compulsory": ["mandatory"],
+    # The schemes name the compulsory parts by these words (MWS, SIP, NEC, SP, MOOC).
+    "mandatory": ["compulsory", "mandatory workshop", "audit", "skill internship",
+                  "novel engaging course", "semester proficiency", "mooc"],
+    "compulsory": ["mandatory", "mandatory workshop", "skill internship", "novel engaging course"],
 }
 
 # Questions about these topics always search the matching page of the
