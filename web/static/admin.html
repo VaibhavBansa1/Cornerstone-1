@@ -22,6 +22,7 @@
     <div class="card stat"><div class="stat-num" id="nQs">–</div><div class="stat-lbl">Questions asked</div></div>
     <div class="card stat"><div class="stat-num" id="avgMs">–</div><div class="stat-lbl">Avg. response time</div></div>
     <div class="card stat"><div class="stat-num small" id="aiName">–</div><div class="stat-lbl">AI answering now</div></div>
+    <div class="card stat"><div class="stat-num" id="helpful">–</div><div class="stat-lbl" id="helpfulLbl">Helpful answers</div></div>
   </section>
 
   <section class="cols">
@@ -55,6 +56,12 @@
       <div class="card">
         <h3>Most cited sources</h3>
         <ol class="rank" id="topSrc"></ol>
+      </div>
+      <div class="card">
+        <h3>Sources in unhelpful answers</h3>
+        <ol class="rank" id="badSrc"></ol>
+        <h3 style="margin-top:14px">Latest comments</h3>
+        <ul class="rank" id="fbComments"></ul>
       </div>
     </div>
   </section>

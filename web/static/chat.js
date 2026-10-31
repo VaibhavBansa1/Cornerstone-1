@@ -153,10 +153,46 @@ function renderAnswer(bubble, data) {
       navigator.clipboard?.writeText(data.answer).then(() => { copy.textContent = "Copied"; setTimeout(() => copy.textContent = "Copy", 1500); });
     });
     foot.appendChild(copy);
+    foot.appendChild(feedbackButtons(data));
   }
   bubble.appendChild(foot);
 
   showSources(idx, data.generated ? (cited[0] || {}).n : 1, false);
+}
+
+// "Was this helpful?" -- sends the vote, the cited sources and which AI
+// answered; never the question. A comment is sent only if the student types one.
+function feedbackButtons(data) {
+  const box = el("span", "fb");
+  box.appendChild(el("span", null, "Helpful?"));
+  const cited = data.sources.filter(s => data.cited.includes(s.n)).map(s => ({ source_url: s.source_url, title: s.title }));
+  const send = (vote, comment) => fetch("/api/feedback", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vote, comment: comment || "", sources: cited, provider: data.provider }),
+  }).catch(() => {});
+  const vote = up => {
+    box.textContent = up ? "Thanks!" : "Thanks. What was wrong? (optional)";
+    send(up ? "up" : "down");
+    if (up) return;
+    const form = el("span", "fb-form");
+    const input = el("input"); input.type = "text"; input.maxLength = 500;
+    input.placeholder = "e.g. old information, wrong batch… (no personal details)";
+    const ok = el("button", "linkish", "Send"); ok.type = "button";
+    ok.addEventListener("click", () => {
+      if (input.value.trim()) send("down", input.value.trim());
+      form.replaceWith(el("span", null, " Sent, thank you."));
+    });
+    form.append(input, ok);
+    box.appendChild(form);
+    input.focus();
+  };
+  for (const [label, up] of [["👍", true], ["👎", false]]) {
+    const b = el("button", "fb-btn", label); b.type = "button";
+    b.setAttribute("aria-label", up ? "Helpful" : "Not helpful");
+    b.addEventListener("click", () => vote(up));
+    box.appendChild(b);
+  }
+  return box;
 }
 
 function linkButton(label, href, cls) {
