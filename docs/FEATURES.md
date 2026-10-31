@@ -86,10 +86,12 @@ For role questions, the code first builds a **timeline** of every named person +
 **Where:** `SYSTEM_PROMPT` and `build_prompt()` in `rag/pipeline.py`, `rag/roles.py`. See the exact AI input: `uv run -m rag.pipeline --show-prompt "your question"`.
 
 ### 10. Any AI model, with automatic backup [D12]
+
 **Why:** free APIs have small limits; a demo must not die because one says "too many requests".
 **What:** OpenRouter, Groq, GitHub Models, Gemini, Anthropic, OpenAI, LM Studio and Ollama. If one fails or hits its limit, the next one answers (a rate-limited one is skipped for 60 s). If all fail, the chat shows the matching passages instead.
 **How:** they all follow one small interface and are called over plain HTTP, so there are no SDKs to install.
 **Where:** `rag/llm/`. Choose with `LLM_PROVIDERS=groq,openrouter,ollama` + the API key (see README).
+**Thinking:** the OpenRouter backup runs with its thinking step switched off, and a reply that is a model's thinking ("The user is asking…") is never shown; the next backup answers instead.
 
 ### 11. Chat page with clickable sources [D13]
 **Why:** students (and examiners) should see *where* every answer comes from.
@@ -125,11 +127,11 @@ While it works, the chat shows **live progress** instead of a spinner: "Reading 
 
 Latest run by group: labs 6/6 · School/department 6/6 · schemes 5/5 · college-wide 15/16 · not on the site 3/4 · where is 4/5 · mandatory tasks 5/6 · contacts 5/5 · syllabus/timetable/notices 6/6 · vague/typos 4/4 · follow-ups 3/3.
 
-The four that still fail:
-- **"Who is the HOD of CSE?"**: CSE isn't covered, but a 2019 magazine names a "CSE & IT" head; the model reports that (with a warning that it's old) instead of saying it doesn't know.
-- **"What is mandatory in 5th sem for the 2024 batch?"**: it lists the subjects, not the mandatory components (workshops, SIP, NEC).
-- **"canteen me kya kya milta hai?"**: right content, but written in Hindi script instead of Hinglish in English letters.
-- **"Where is the HOD's cabin?"**: it answers "Room SH5" from an old 2021-22 document instead of saying the site doesn't say.
+The four that failed on 31 Oct, all fixed the same evening (re-run of the 24 related questions: **24/24**):
+- **"Who is the HOD of CSE?"**: quoted a 2019 magazine. Now a prompt rule: never name another department's head, staff or rooms.
+- **"Where is the HOD's cabin?"**: read "Room No.: SH-5" on a timetable signed by the Dean as his cabin. Now: a timetable room number is that class's classroom.
+- **"canteen me kya kya milta hai?"**: answered in Hindi script. Now the prompt ends with a reminder to answer in English letters when the question is typed in English letters.
+- **"What is mandatory in 5th sem for the 2024 batch?"**: listed subjects. Now "mandatory" also searches the words the schemes use (skill internship, Novel Engaging Course, semester proficiency, MOOC), which brings up the scheme's list of compulsory parts.
 
 ### 15. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. OCR not installed → scanned pages skipped with a warning. Crawl stopped → old data kept. Each case has a test in `tests/`.
@@ -147,6 +149,10 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 ### 18. Whole-document mode
 **Why:** "how many groups…", "compare…" need the whole list, not the 5 best pieces of it.
 **What:** if the top 3 matches all come from one document of up to 12,000 characters, the AI gets that document whole, marked "whole document". It may count and compare across it, and anything it works out that the document doesn't say in words must start with "This suggests". Settings: `WHOLE_DOC_TOP_MATCHES`, `WHOLE_DOC_MAX_CHARS`. **Where:** `rag/retrieval.py` (`_whole_document`), prompt rule 13.
+
+### 19. Partly scanned pages
+**Why:** many PDFs have a typed header over a scanned body (letters, notices, BoS pages): the typed part was read, the scanned part was lost.
+**What:** a page that is at least half picture and has under 1,000 typed characters is OCR'd too, and the longer text is kept (pages with a full hidden text layer are left alone). Each OCR'd PDF gets a confidence score; pages under 60% are marked "OCR unsure" on the admin page (type "ocr unsure" in its search box). Measured on the crawl: 299 pages with under 300 typed characters + 903 with 300–1,000; one test PDF went from 18,397 to 24,487 characters. **Where:** `ingestion/readers.py` (`partly_scanned_pages`), `ingestion/ocr.py`, settings `OCR_MIXED_*`, `OCR_LOW_CONFIDENCE`. Takes effect at the next data rebuild.
 
 ## Everyday commands
 
