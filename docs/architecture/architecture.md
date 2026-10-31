@@ -25,7 +25,7 @@ A real question traced through the system. The values on the right are actual ou
 
 ## Design decisions
 
-Each row answers: what we chose, why, and what we did **not** choose. D15–D17 came from testing with real-style questions (55, later 63); D18–D19 record where the build differs from the milestone 1–2 plan, and why.
+Each row answers: what we chose, why, and what we did **not** choose. D15–D17 came from testing with real-style questions (55, later 63, then 66); D18–D19 record where the build differs from the milestone 1–2 plan, and why; D20–D22 were added for the demo (follow-ups, feedback, whole documents).
 
 | # | Decision | Why | Not chosen (and why not) |
 |---|---|---|---|
@@ -48,6 +48,9 @@ Each row answers: what we chose, why, and what we did **not** choose. D15–D17 
 | **D17** | **63 graded test questions** (`scripts/eval.py`) run after every change; latest score 61/63 on Groq. | Each fix in D15 was found by them, and they show the fixes didn't break anything else. | Judging answers by hand each time: slow and easy to fool yourself. An AI judge: costs calls and needs its own checking. |
 | **D18** | **Python, files and FAISS instead of the planned React / Node.js / MongoDB / Pinecone** (Milestones 1–2). | The AI parts (embedding models, FAISS, OCR, rerankers) are Python-first. 9,348 chunks fit in memory (~15 MB) and are searched on the same machine, offline, for free. Text comes from pypdf + OCR and a 10-line .docx reader. | Pinecone: a paid cloud service with an API key and a network round-trip per question, built for millions of documents. Mammoth / pdf-parse: JavaScript libraries, and pdf-parse cannot read scanned pages. |
 | **D19** | **One session, no accounts, nothing stored.** The chat is a help widget: ask one question or several, reload and it is gone. Only the admin page has a password. | Students ask personal things; a help desk doesn't need to remember them. No login means no friction and no student data to protect. | Student logins and saved chat history (Milestone 2 design): more code, more personal data, and no benefit for one-off questions. |
+| **D20** | **Follow-ups are rewritten, not remembered.** The browser sends the last 3 turns; one short AI call turns "and who was before him?" into a complete question before searching. | Search works on complete questions; the server still stores nothing (D19). | Sending the whole chat to the search: old words pull in wrong pages. Server-side chat memory: personal data to protect. |
+| **D21** | **👍/👎 with an optional comment, never the question.** Stored: vote, cited sources, model, comment. | Shows which sources lead to bad answers, without keeping what students asked. | Logging questions to review later: breaks the privacy promise. |
+| **D22** | **Whole-document mode.** If the top 3 matches come from one document of ≤ 12,000 characters, the AI gets it whole; conclusions not written in it start with "This suggests". | Counting and comparing ("how many groups…") need the full list; the marker keeps a conclusion apart from a fact. | Always sending more pieces: costs tokens on every question. A bigger top-k: still cuts lists in the middle. |
 
 ---
 
