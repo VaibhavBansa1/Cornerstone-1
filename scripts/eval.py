@@ -34,7 +34,7 @@ UNKNOWN = re.compile(
     r"|(do not|don't|does not|doesn't) (explicitly |specifically )?(have|contain|mention|include|cover|specify|list|give|provide)"
     r"|(no|not any) (specific |explicit )?(information|details|mention|data)"
     r"|could ?n[o']t find|cannot find|can't find|unable to find|not able to find"
-    r"|none of the (provided |available |given )?sources"
+    r"|none of the (\w+ ){0,4}sources"
     r"|i (don't|do not) know|not sure"
     r"|(jaankari|jankari|information) nahi|nahi (hai|mili|pata)|pata nahi",
     re.I,
