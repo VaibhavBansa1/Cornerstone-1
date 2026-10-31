@@ -2,7 +2,8 @@
 
 Many college PDFs are scans: images of paper with no text inside, so the
 chatbot can't read them. For each page with no text, we render it as an
-image and run OCR on it.
+image and run OCR on it. Pages that are mostly a picture with only a little
+typed text (a typed header over a scanned body) are OCR'd too.
 
 Engines (pick with OCR_ENGINE=auto|easyocr|rapidocr|none):
 * easyocr  -- uses PyTorch, fast on an NVIDIA GPU (~2 s/page)
@@ -116,23 +117,77 @@ def boxes_to_text(results, min_conf: float | None = None) -> str:
     return "\n".join(" ".join(t for _, t in sorted(words)) for _, _, words in lines)
 
 
-def ocr_pdf_pages(path, page_numbers: list[int]) -> dict[int, str]:
-    """{page_number: text} for the given (0-based) pages of a PDF."""
+def mean_confidence(results, min_conf: float | None = None) -> float | None:
+    """Average confidence of the words kept by boxes_to_text (longer words
+    count more). None if no word was kept."""
+    min_conf = config.OCR_MIN_CONFIDENCE if min_conf is None else min_conf
+    total = weight = 0.0
+    for _box, text, conf in results:
+        n = sum(ch.isalnum() for ch in (text or ""))
+        if conf >= min_conf and n:
+            total += conf * n
+            weight += n
+    return round(total / weight, 3) if weight else None
+
+
+def _bounds(obj):
+    get = getattr(obj, "get_bounds", None) or obj.get_pos  # pypdfium2 5.x / 4.x
+    return get()[:4]
+
+
+def image_fractions(path) -> list[float]:
+    """For each page, how much of it (0-1) is covered by pictures. [] if the
+    PDF can't be inspected."""
+    try:
+        import pypdfium2 as pdfium
+        import pypdfium2.raw as raw
+    except ImportError:
+        return []
+    out: list[float] = []
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+    except Exception:
+        return []
+    try:
+        for page in pdf:
+            w, h = page.get_size()
+            covered = 0.0
+            for obj in page.get_objects(max_depth=2):
+                if obj.type == raw.FPDF_PAGEOBJ_IMAGE:
+                    left, bottom, right, top = _bounds(obj)
+                    covered += max(0, min(right, w) - max(left, 0)) * max(0, min(top, h) - max(bottom, 0))
+            out.append(min(1.0, covered / (w * h)) if w * h else 0.0)
+    except Exception as exc:
+        log.debug("Could not inspect pictures in %s: %s", path, exc)
+        return []
+    finally:
+        pdf.close()
+    return out
+
+
+def ocr_pdf_pages_scored(path, page_numbers: list[int]) -> dict[int, tuple[str, float | None]]:
+    """{page_number: (text, confidence)} for the given (0-based) pages."""
     engine = get_engine()
     if engine is None or not page_numbers:
         return {}
     import pypdfium2 as pdfium
 
     _name, run = engine
-    out: dict[int, str] = {}
+    out: dict[int, tuple[str, float | None]] = {}
     pdf = pdfium.PdfDocument(str(path))
     try:
         for i in page_numbers:
             try:
                 img = pdf[i].render(scale=config.OCR_RENDER_SCALE).to_numpy()
-                out[i] = boxes_to_text(run(img))
+                boxes = run(img)
+                out[i] = (boxes_to_text(boxes), mean_confidence(boxes))
             except Exception as exc:
                 log.warning("OCR failed on %s page %d: %s", path, i + 1, exc)
     finally:
         pdf.close()
     return out
+
+
+def ocr_pdf_pages(path, page_numbers: list[int]) -> dict[int, str]:
+    """{page_number: text} for the given (0-based) pages of a PDF."""
+    return {i: text for i, (text, _conf) in ocr_pdf_pages_scored(path, page_numbers).items()}

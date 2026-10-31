@@ -246,6 +246,7 @@ table.docs td.name a:hover { color: var(--brand); text-decoration: underline; }
 .tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #eef2fa; color: var(--brand); white-space: nowrap; }
 .tag.t-pdf { background: #fdeceb; color: #b42318; }
 .tag.t-upload { background: #e9f7ef; color: var(--ok); }
+.ocr-warn { display: block; font-size: 11px; font-weight: 600; color: #b54708; margin-top: 2px; }
 .tag.t-image, .tag.t-video, .tag.t-audio { background: #f3effc; color: #6941c6; }
 a.mini { font-size: 12px; color: var(--brand); text-decoration: none; }
 a.mini:hover { text-decoration: underline; }

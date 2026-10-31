@@ -65,7 +65,7 @@ def html_to_text(html: str) -> str:
     return normalize_text(text)
 
 
-PDF_CACHE_VERSION = "2"  # bump to force re-extraction of every PDF
+PDF_CACHE_VERSION = "3"  # 3: partly scanned pages OCR'd too. Bump to force re-extraction of every PDF
 MIN_PAGE_TEXT_CHARS = 30  # a page with less text than this is treated as scanned
 
 
@@ -88,29 +88,44 @@ def _pdf_date(reader) -> str | None:
     return None
 
 
-def pdf_extract(path: Path) -> dict:
-    """PDF -> {"text", "pdf_date", "pages", "scanned_pages", "ocr_pages"}.
+def _letters(text: str) -> int:
+    return sum(ch.isalnum() for ch in text)
 
-    Text pages are read directly; pages with no text (scans) are OCR'd when
-    an OCR engine is installed. Results are cached by file content, so a
-    rebuild only re-reads new or changed PDFs.
+
+def partly_scanned_pages(page_texts: list[str], image_fractions: list[float], scanned: set[int]) -> list[int]:
+    """Pages with some typed text that are mostly a picture: a typed header
+    over a scanned body. Pages with plenty of typed text are left alone (many
+    scans already carry a full hidden text layer)."""
+    return [i for i, t in enumerate(page_texts)
+            if i not in scanned and i < len(image_fractions)
+            and image_fractions[i] >= config.OCR_MIXED_IMAGE_FRACTION
+            and len(t.strip()) < config.OCR_MIXED_MAX_TEXT_CHARS]
+
+
+def pdf_extract(path: Path) -> dict:
+    """PDF -> {"text", "pdf_date", "pages", "scanned_pages", "mixed_pages",
+    "ocr_pages", "ocr_confidence", "low_confidence_pages"}.
+
+    Text pages are read directly; pages with no text (scans) and partly
+    scanned pages are OCR'd when an OCR engine is installed. Results are
+    cached by file content, so a rebuild only re-reads new or changed PDFs.
     """
     cache = None
     try:
         cache = _pdf_cache_path(path)
         if cache.exists():
             cached = json.loads(cache.read_text(encoding="utf-8"))
-            # Re-do a cached result only if its scanned pages were never
-            # OCR'd (it was cached on a machine without OCR) and OCR is
-            # available now. Pages OCR found no words on (blank pages,
-            # photos) must NOT trigger a redo every time.
-            ocr_done = cached.get("ocr_attempted") or cached.get("ocr_pages", 0) > 0
-            if not cached.get("scanned_pages") or ocr_done or not ocr.available():
+            # Re-do a cached result only if it was made on a machine without
+            # OCR and OCR is available now. Pages OCR found no words on
+            # (blank pages, photos) must NOT trigger a redo every time.
+            ocr_done = (cached.get("ocr_checked") or cached.get("ocr_attempted")
+                        or cached.get("ocr_pages", 0) > 0)
+            if ocr_done or not ocr.available():
                 return cached
     except (OSError, ValueError):
         pass
 
-    result = {"text": "", "pdf_date": None, "pages": 0, "scanned_pages": 0, "ocr_pages": 0}
+    result = {"text": "", "pdf_date": None, "pages": 0, "scanned_pages": 0, "mixed_pages": 0, "ocr_pages": 0}
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -132,13 +147,26 @@ def pdf_extract(path: Path) -> dict:
     scanned = [i for i, t in enumerate(page_texts) if len(t.strip()) < MIN_PAGE_TEXT_CHARS]
     result["pages"] = len(page_texts)
     result["scanned_pages"] = len(scanned)
-    if scanned and ocr.available():
+    can_ocr = bool(page_texts) and ocr.available()
+    mixed = partly_scanned_pages(page_texts, ocr.image_fractions(path), set(scanned)) if can_ocr else []
+    result["mixed_pages"] = len(mixed)
+    result["ocr_checked"] = can_ocr
+    if can_ocr and (scanned or mixed):
         result["ocr_attempted"] = True
-        log.info("OCR: %s (%d of %d pages are scanned)", path.name, len(scanned), len(page_texts))
-        for i, text in ocr.ocr_pdf_pages(path, scanned).items():
-            if text.strip():
-                page_texts[i] = text
-                result["ocr_pages"] += 1
+        log.info("OCR: %s (%d scanned + %d partly scanned of %d pages)", path.name, len(scanned), len(mixed),
+                 len(page_texts))
+        confidence = {}
+        for i, (text, conf) in ocr.ocr_pdf_pages_scored(path, scanned + mixed).items():
+            if not text.strip() or _letters(text) <= _letters(page_texts[i]):
+                continue  # nothing read, or the typed text was already as good
+            page_texts[i] = text
+            result["ocr_pages"] += 1
+            if conf is not None:
+                confidence[i] = conf
+        if confidence:
+            result["ocr_confidence"] = round(sum(confidence.values()) / len(confidence), 3)
+            result["low_confidence_pages"] = sorted(i + 1 for i, c in confidence.items()
+                                                    if c < config.OCR_LOW_CONFIDENCE)
     result["text"] = normalize_text("\n".join(page_texts))
 
     if cache is not None:

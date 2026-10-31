@@ -138,6 +138,7 @@ def build_chunks() -> list[dict]:
             # Title = page + where it's linked + file name, e.g.
             # "Syllabus - MITS Gwalior - V SEM · 2024-28 BATCH - 5th 11_merged.pdf"
             doc_title = " - ".join(p for p in (referring_title, label, display_name) if p)
+            start = len(chunks)
             chunks.extend(with_course_list(
                 make_chunks(
                     source_url=asset["url"],
@@ -149,6 +150,10 @@ def build_chunks() -> list[dict]:
                     fallback_date=info.get("pdf_date") or fallback,
                     link_label=label,
                 ), text))
+            if info.get("low_confidence_pages"):  # shown on the admin page: check these against the PDF
+                for c in chunks[start:]:
+                    c["ocr_confidence"] = info.get("ocr_confidence")
+                    c["low_confidence_pages"] = info["low_confidence_pages"]
         else:
             description = (
                 f"{kind.capitalize()} file '{display_name}' "
