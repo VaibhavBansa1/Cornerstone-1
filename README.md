@@ -33,7 +33,7 @@ Set one or more API keys. Every provider with a key is tried in order; if one fa
 
 | Provider | Key | Model (default) |
 |---|---|---|
-| OpenRouter (free `:free` models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`google/gemma-4-31b-it:free`) |
+| OpenRouter (free `:free` models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` (`nvidia/nemotron-3-ultra-550b-a55b:free`) |
 | Groq (free tier) | `GROQ_API_KEY` | `GROQ_MODEL` (`openai/gpt-oss-120b`) |
 | Groq, smaller model (own free allowance) | same `GROQ_API_KEY` | `GROQ_SMALL_MODEL` (`openai/gpt-oss-20b`) |
 | GitHub Models | `GITHUB_MODELS_TOKEN` | `GITHUB_MODELS_MODEL` (`openai/gpt-4.1-mini`) |

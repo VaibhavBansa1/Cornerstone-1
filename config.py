@@ -271,7 +271,7 @@ PROVIDER_SETTINGS = {
         "kind": "openai",
         "base_url": _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         "api_key_env": "OPENROUTER_API_KEY",
-        "model": _env("OPENROUTER_MODEL", "google/gemma-4-31b-it:free"),
+        "model": _env("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"),
     },
     "groq": {
         "kind": "openai",
