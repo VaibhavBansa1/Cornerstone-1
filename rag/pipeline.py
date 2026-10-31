@@ -74,7 +74,8 @@ Rules:
 9. Your sources are the IT department's website (the department is now called the School of Information Technology, SoIT; "department", "dept" and "school" mean the same) plus a set of college-wide pages: rules and ordinances, academic calendar, exams, fees, admissions, hostels, library, student cells, placement and notices. If the sources don't answer the question (other departments' details, transport, directions, general knowledge...), say you don't have that information and suggest the main MITS website (mitsgwalior.in) or the department office. A passing mention is not an answer: a student magazine article, a project title or a line in someone's profile does not tell you what the college has today. Addresses and phone numbers in lists of committee or Board of Studies members belong to those members' own institutions, not MITS; never work out directions or addresses yourself; only repeat what a source says about MITS itself. If a source only says "check the website for X", say exactly that and add no details of your own.
 10. Never list individual students' names, roll numbers, marks or attendance from lists (debarred lists, marks, attendance sheets). Say which notice contains it and that the student should check their own roll number there.
 11. "Lab" can mean a physical laboratory of the department or a lab course (practical subject) in a semester. If the question doesn't make clear which, list the department's laboratories and add one line saying that each semester's lab courses are in its syllabus.
-12. If the question is very broad ("tell me everything"), give a short overview from the sources and suggest two or three specific questions the student could ask."""
+12. If the question is very broad ("tell me everything"), give a short overview from the sources and suggest two or three specific questions the student could ask.
+13. A source marked "whole document" is complete: you may count, compare and summarise across it. Anything you work out that the document does not state in so many words, start with "This suggests" so the student can tell a conclusion from a fact."""
 
 
 def batch_guide(today: date | None = None) -> str:
@@ -94,8 +95,9 @@ def build_context(results: list[dict]) -> str:
     parts = []
     for i, r in enumerate(results, 1):
         title = r.get("title") or r["source_url"]
+        whole = ", whole document" if r.get("whole_document") or r.get("topic_page") else ""
         parts.append(
-            f"[{i}] {title} (type: {r.get('source_type')}, dated: {date_label(r.get('date'))})\n{r['text']}"
+            f"[{i}] {title} (type: {r.get('source_type')}, dated: {date_label(r.get('date'))}{whole})\n{r['text']}"
         )
     return "\n\n".join(parts)
 

@@ -219,3 +219,27 @@ def test_odd_citation_styles_become_numbers():
 
     assert clean_citations("Head is X【4†L1-L3】 and Y [2†L9].") == "Head is X[4] and Y [2]."
     assert clean_citations("plain [1] stays") == "plain [1] stays"
+
+
+def test_question_about_one_document_gets_the_whole_document(monkeypatch):
+    monkeypatch.setattr(config, "WHOLE_DOC_TOP_MATCHES", 3)
+    monkeypatch.setattr(config, "WHOLE_DOC_MAX_CHARS", 12000)
+    rows = [f"G{n:02d} Student {n} Project allotment email spam classification" for n in range(1, 5)]
+    doc = [{"source_url": "https://x/allot.pdf", "source_type": "pdf", "title": "Project Allotment List",
+            "chunk_index": i, "date": "2026-07-01", "text": t} for i, t in enumerate(rows)]
+    other = [_chunk("Hostel fees are payable in July", "2026-07-01")]
+    results = HybridRetriever(doc + other).search("project allotment list email spam", top_k=3, today=TODAY)
+    assert results[0].get("whole_document") and all(r in results[0]["text"] for r in rows)
+    assert sum(r["source_url"] == "https://x/allot.pdf" for r in results) == 1
+
+    monkeypatch.setattr(config, "WHOLE_DOC_MAX_CHARS", 50)  # too big -> normal pieces
+    results = HybridRetriever(doc + other).search("project allotment list email spam", top_k=3, today=TODAY)
+    assert not any(r.get("whole_document") for r in results)
+
+
+def test_whole_documents_are_marked_in_the_prompt():
+    from rag.pipeline import build_context
+
+    ctx = build_context([{"source_url": "u", "source_type": "pdf", "title": "List", "date": None,
+                          "text": "rows", "whole_document": True}])
+    assert "whole document" in ctx.splitlines()[0]

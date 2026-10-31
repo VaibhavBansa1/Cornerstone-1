@@ -234,6 +234,12 @@ QUERY_SYNONYMS = {
 # Questions about these topics always search the matching page of the
 # department website too (topic found by rag/query_understanding.py),
 # e.g. "what labs are there?" -> the "Laboratories" page.
+# Whole-document mode: when the top WHOLE_DOC_TOP_MATCHES matches all come
+# from one document of at most WHOLE_DOC_MAX_CHARS characters (~3,000
+# tokens), the AI gets that document whole instead of two pieces of it.
+WHOLE_DOC_TOP_MATCHES = _env_int("WHOLE_DOC_TOP_MATCHES", 3)
+WHOLE_DOC_MAX_CHARS = _env_int("WHOLE_DOC_MAX_CHARS", 12000)
+
 TOPIC_PAGES = {
     "labs": "Laboratories",
     "contacts": "Contacts",
