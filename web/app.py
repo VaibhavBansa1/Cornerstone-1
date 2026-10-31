@@ -5,6 +5,7 @@
 Endpoints:
     POST   /api/query              {"question": "...", "history": [{"q", "a"}]} -> answer + sources
     POST   /api/query/stream       same, with progress lines first (chat page)
+    POST   /api/feedback           👍/👎 on an answer (vote + cited sources, no question text)
     GET    /api/status             index / generation backend readiness
     GET    /api/documents          what is currently indexed
     GET    /api/stats              usage stats from the chat log
@@ -215,6 +216,22 @@ def query_stream():
 
     return Response(lines(), mimetype="application/x-ndjson", headers={"Cache-Control": "no-cache",
                                                                        "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/feedback")
+def feedback():
+    """A 👍/👎 on one answer: the vote, its cited sources, which AI answered and
+    (only if the student typed one) a short comment. Never the question."""
+    data = request.get_json(silent=True) or {}
+    if data.get("vote") not in ("up", "down"):
+        return jsonify({"error": "vote must be 'up' or 'down'"}), 400
+    sources = [
+        {"source_url": str(s.get("source_url") or "")[:500], "title": str(s.get("title") or "")[:200]}
+        for s in (data.get("sources") or [])[:10] if isinstance(s, dict)
+    ]
+    comment = str(data.get("comment") or "").strip()[:500]
+    chatlog.log_feedback(data["vote"] == "up", sources, str(data.get("provider") or "")[:100], comment)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/documents")

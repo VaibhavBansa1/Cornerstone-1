@@ -82,6 +82,24 @@ async function load(attempt = 1) {
     item.append(name, el("span", "count", s.count + "×"));
     top.appendChild(item);
   });
+
+  const fb = stats.feedback || { up: 0, down: 0, comments: [], unhelpful_sources: [] };
+  const votes = fb.up + fb.down;
+  $("helpful").textContent = votes ? Math.round(100 * fb.up / votes) + "%" : "–";
+  $("helpfulLbl").textContent = `Helpful answers (${votes} vote${votes === 1 ? "" : "s"})`;
+  const bad = $("badSrc");
+  bad.textContent = "";
+  if (!fb.unhelpful_sources.length) bad.appendChild(el("li", "muted", "No 👎 yet"));
+  fb.unhelpful_sources.forEach(s => {
+    const item = el("li");
+    const name = link(s.name, s.link, "rank-name"); name.title = s.name;
+    item.append(name, el("span", "count", s.count + "×"));
+    bad.appendChild(item);
+  });
+  const com = $("fbComments");
+  com.textContent = "";
+  if (!fb.comments.length) com.appendChild(el("li", "muted", "No comments yet"));
+  fb.comments.forEach(c => com.appendChild(el("li", null, "“" + c.text + "” · " + new Date(c.at * 1000).toLocaleDateString())));
 }
 
 function setMsg(text, cls) { $("upMsg").textContent = text; $("upMsg").className = "msgline " + (cls || ""); }

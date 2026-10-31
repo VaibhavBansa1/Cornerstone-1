@@ -31,11 +31,36 @@ CREATE TABLE IF NOT EXISTS chat_log (
 """
 
 
+# "Was this helpful?" votes: the vote, the cited sources and the AI that
+# answered -- never the question. ``comment`` is only filled when the student
+# chooses to type one and press Send.
+_FEEDBACK_SCHEMA = """
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at REAL NOT NULL,
+    vote INTEGER NOT NULL,
+    sources TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    comment TEXT NOT NULL
+)
+"""
+
+
 def _connect() -> sqlite3.Connection:
     config.CHAT_LOG_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(config.CHAT_LOG_DB_PATH)
     conn.execute(_SCHEMA)
+    conn.execute(_FEEDBACK_SCHEMA)
     return conn
+
+
+def log_feedback(helpful: bool, sources: list[dict], provider: str, comment: str = ""):
+    slim = [{"source_url": x.get("source_url"), "title": x.get("title")} for x in sources]
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO feedback (at, vote, sources, provider, comment) VALUES (?, ?, ?, ?, ?)",
+            (time.time(), 1 if helpful else -1, json.dumps(slim), provider, comment),
+        )
 
 
 def log_question(sources: list[dict], provider: str, response_ms: int):
@@ -69,8 +94,27 @@ def stats(top_n: int = 5, label_for=None, link_for=None) -> dict:
     for url, count in cited.most_common(top_n):
         name = (label_for(url) if label_for else None) or fallback_name[url]
         top.append({"name": name, "count": count, "link": link_for(url) if link_for else None})
+    with _connect() as conn:
+        votes = conn.execute("SELECT vote, sources, comment, at FROM feedback ORDER BY id DESC").fetchall()
+    unhelpful = Counter()
+    for vote, sources, _c, _at in votes:
+        if vote < 0:
+            for s in json.loads(sources):
+                url = s.get("source_url") or s.get("title") or "?"
+                unhelpful[url] += 1
+                fallback_name.setdefault(url, s.get("title") or url)
     return {
         "total_questions": len(rows),
         "avg_response_ms": round(sum(r[1] for r in rows) / len(rows)) if rows else 0,
         "top_sources": top,
+        "feedback": {
+            "up": sum(v > 0 for v, *_ in votes),
+            "down": sum(v < 0 for v, *_ in votes),
+            "comments": [{"text": c, "at": at} for v, _s, c, at in votes if c][:5],
+            "unhelpful_sources": [
+                {"name": (label_for(u) if label_for else None) or fallback_name[u], "count": n,
+                 "link": link_for(u) if link_for else None}
+                for u, n in unhelpful.most_common(top_n)
+            ],
+        },
     }

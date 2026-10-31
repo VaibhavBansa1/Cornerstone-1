@@ -218,7 +218,7 @@ body.admin-page { min-height: 100vh; }
 .card p.muted { margin: -6px 0 12px; line-height: 1.45; }
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat-num { font-size: 28px; font-weight: 700; color: var(--brand); line-height: 1.15; }
 .stat-num.small { font-size: 20px; padding-top: 6px; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-lbl { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
@@ -298,3 +298,10 @@ ul.plain .when { color: var(--muted); font-size: 12px; white-space: nowrap; flex
 .answer table { border-collapse: collapse; font-size: 14px; min-width: 60%; }
 .answer th, .answer td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; vertical-align: top; }
 .answer th { background: var(--brand-soft, #eef2f8); font-weight: 600; }
+
+/* "Was this helpful?" */
+.fb { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fb-btn { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 1px 8px; cursor: pointer; font-size: 13px; }
+.fb-btn:hover { border-color: var(--brand); }
+.fb-form { display: inline-flex; gap: 6px; }
+.fb-form input { font: inherit; font-size: 12.5px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 8px; min-width: 240px; }

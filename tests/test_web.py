@@ -231,3 +231,18 @@ def test_stream_passes_history_and_reports_the_rewritten_question(client, monkey
     assert got["history"] == [{"q": "Who is the HOD?", "a": "Dr. X [1]."}]
     assert events[0] == {"type": "step", "step": "rewritten", "value": "Who was the HOD before Dr. X?"}
     assert events[-1]["rewritten"] == "Who was the HOD before Dr. X?"
+
+
+def test_feedback_is_stored_without_the_question_and_shows_in_stats(client, monkeypatch):
+    monkeypatch.setattr(pipeline, "index_exists", lambda: False)  # stats without an index
+    src = [{"source_url": "https://web.mitsgwalior.in/uploads/old.pdf", "title": "old.pdf"}]
+    assert client.post("/api/feedback", json={"vote": "maybe"}).status_code == 400
+    assert client.post("/api/feedback", json={"vote": "up", "sources": src, "provider": "groq"}).get_json() == {"ok": True}
+    client.post("/api/feedback", json={"vote": "down", "sources": src, "provider": "groq", "comment": "old info"})
+    fb = client.get("/api/stats").get_json()["feedback"]
+    assert (fb["up"], fb["down"]) == (1, 1)
+    assert fb["unhelpful_sources"][0]["count"] == 1
+    assert [c["text"] for c in fb["comments"]] == ["old info"]
+    import sqlite3
+    cols = [r[1] for r in sqlite3.connect(config.CHAT_LOG_DB_PATH).execute("PRAGMA table_info(feedback)")]
+    assert "question" not in cols
