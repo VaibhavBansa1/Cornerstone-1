@@ -93,3 +93,27 @@ def test_dotenv_file_sets_missing_variables_only(tmp_path, monkeypatch):
     assert os.environ["OPENROUTER_API_KEY"] == "sk-or-test"
     assert os.environ["GROQ_API_KEY"] == "from-env"
     monkeypatch.delenv("OPENROUTER_API_KEY")
+
+
+def test_a_reply_that_is_the_models_thinking_is_not_shown():
+    from rag.llm.http_providers import looks_like_thinking
+
+    assert looks_like_thinking("The user is asking about mandatory tasks. Today's date is ...")
+    assert looks_like_thinking("**We need to answer from the sources")
+    assert not looks_like_thinking("The minimum attendance required is 75% [1].")
+    assert not looks_like_thinking("Hostel mein ye facilities hain: ...")
+
+
+def test_openrouter_is_asked_not_to_think(monkeypatch):
+    from rag.llm import http_providers
+
+    sent = {}
+
+    def fake_post(url, *, headers, payload, provider, timeout=None):
+        sent.update(payload)
+        return {"choices": [{"message": {"content": "Answer [1]."}}]}
+
+    monkeypatch.setattr(http_providers, "_post", fake_post)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    assert registry.get_provider("openrouter").generate("s", "u") == "Answer [1]."
+    assert sent["reasoning"] == {"enabled": False}

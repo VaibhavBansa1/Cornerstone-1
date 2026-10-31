@@ -23,8 +23,19 @@ log = logging.getLogger("rag.llm")
 _THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
 
 
+# Some free models sometimes write their thinking as the answer itself
+# ("The user is asking about ..."). Such a reply is not shown to students.
+_LEAKED_THINKING_RE = re.compile(
+    r"^(the user (is asking|asks|wants|has asked|question)|we need to|let me (think|look|check)|"
+    r"okay,? (so|let's|let me)|i need to (answer|figure|find))", re.I)
+
+
 def clean_reply(text: str) -> str:
     return _THINK_RE.sub("", text or "").strip()
+
+
+def looks_like_thinking(text: str) -> bool:
+    return bool(_LEAKED_THINKING_RE.match(text.lstrip("*# ")))
 
 
 def _post(url: str, *, headers: dict, payload: dict, provider: str, timeout: int | None = None) -> dict:
@@ -62,6 +73,9 @@ class OpenAICompatibleProvider(LLMProvider):
                 ],
                 "max_tokens": config.LLM_MAX_TOKENS,
                 "temperature": config.LLM_TEMPERATURE,
+                # OpenRouter: no thinking step. Faster, and some free models
+                # otherwise sometimes put their thinking in the answer.
+                **({"reasoning": {"enabled": False}} if self.name == "openrouter" else {}),
             },
             provider=self.name,
         )
@@ -77,6 +91,8 @@ class OpenAICompatibleProvider(LLMProvider):
             raise ProviderError(f"{self.name}: unexpected response shape") from exc
         if not text:
             raise ProviderError(f"{self.name}: empty reply")
+        if looks_like_thinking(text):
+            raise ProviderError(f"{self.name}: replied with its thinking instead of an answer")
         return text
 
 
