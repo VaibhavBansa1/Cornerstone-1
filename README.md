@@ -12,6 +12,10 @@ It reads every page and PDF, gives every piece of text a date, and answers with 
 
 ## Quick start
 
+**Windows, one command:** `powershell -ExecutionPolicy Bypass -File .\run_demo.ps1` sets everything up and starts it (CPU only). Step by step and how to update: [HOW_TO_RUN.md](HOW_TO_RUN.md).
+
+By hand:
+
 Install [uv](https://docs.astral.sh/uv/), then:
 
 ```bash
