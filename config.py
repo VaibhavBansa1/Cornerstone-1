@@ -166,6 +166,14 @@ CHUNK_OVERLAP_CHARS = 150
 OCR_ENGINE = _env("OCR_ENGINE", "auto")
 OCR_RENDER_SCALE = 2.0      # page image size for OCR (2 = ~150 dpi)
 OCR_MIN_CONFIDENCE = 0.35   # drop OCR words the engine isn't sure about
+# Partly scanned pages: a typed header over a scanned body. A page that is at
+# least this much picture AND has fewer typed characters than this is OCR'd
+# too, and the longer of the two texts is kept.
+OCR_MIXED_IMAGE_FRACTION = 0.5
+OCR_MIXED_MAX_TEXT_CHARS = 1000
+# OCR'd pages whose average word confidence is below this are flagged on the
+# admin page ("OCR unsure"), so someone can check them against the original.
+OCR_LOW_CONFIDENCE = 0.6
 
 # --- Embeddings ------------------------------------------------------------
 # Changing the model means the index must be rebuilt:

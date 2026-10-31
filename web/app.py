@@ -251,6 +251,7 @@ def documents():
                 "date": date_label(c.get("doc_date") or c.get("date")),
                 "saved_copy": saved_copy_link(c),
                 "deletable": c.get("source_type") == "upload",
+                "low_confidence_pages": c.get("low_confidence_pages") or [],
             },
         )
         doc["chunks"] += 1

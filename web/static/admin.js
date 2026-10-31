@@ -18,11 +18,15 @@ function link(text, href, cls) {
   return a;
 }
 
+// Scanned pages the OCR wasn't sure about: worth checking against the PDF.
+const unsure = d => (d.low_confidence_pages || []).length > 0;
+
 function renderDocs() {
   const f = $("filter").value.toLowerCase();
   const body = $("docs");
   body.textContent = "";
-  const shown = allDocs.filter(d => (d.title + " " + d.source_type).toLowerCase().includes(f));
+  const shown = allDocs.filter(d => (d.title + " " + d.source_type + (unsure(d) ? " ocr unsure" : ""))
+    .toLowerCase().includes(f));
   $("docCount").textContent = f ? `${shown.length} of ${allDocs.length}` : `${allDocs.length} total`;
   if (!shown.length) {
     const tr = el("tr"); const td = el("td", "muted"); td.colSpan = 5;
@@ -35,6 +39,11 @@ function renderDocs() {
     const name = el("td", "name");
     name.appendChild(link(d.title, d.source_url.startsWith("http") ? d.source_url : d.saved_copy));
     name.title = d.title;
+    if (unsure(d)) {
+      const p = d.low_confidence_pages;
+      name.appendChild(el("span", "ocr-warn",
+        `OCR unsure: page${p.length > 1 ? "s" : ""} ${p.slice(0, 6).join(", ")}${p.length > 6 ? "…" : ""}`));
+    }
     const type = el("td"); type.appendChild(el("span", "tag t-" + d.source_type, TYPE_LABEL[d.source_type] || d.source_type));
     const date = el("td", "muted", d.date && d.date !== "undated" ? d.date : "–");
     const n = el("td", "r", d.chunks);
