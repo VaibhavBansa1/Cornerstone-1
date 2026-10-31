@@ -110,32 +110,43 @@ While it works, the chat shows **live progress** instead of a spinner: "Reading 
 **Privacy:** question and answer text is **never stored**, only counts and cited sources. Saved copies are served only from `data/raw/` and `data/uploads/`, never the index or the log.
 **Where:** `web/app.py`, `web/chatlog.py`, `web/static/admin.*`.
 
-### 14. 63 test questions, graded automatically
+### 14. 66 test questions, graded automatically
 **Why:** "it seems to work" isn't a measurement. Students ask weird things.
-**What:** `scripts/eval_questions.json` has 63 questions in 10 groups: labs (rooms vs practicals), School vs department, schemes, college-wide (mess, canteen, fees, hostel, library, attendance, exams, ragging, clubs, NAAC), things the site doesn't cover (bus timings, JEE cutoff, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, and vague or misspelt questions. Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer, which model gave it, and a score per group. The grading is keyword matching, so read the answers too; `--regrade` grades the last run again after a grader fix, without asking the AI again.
+**What:** `scripts/eval_questions.json` has 66 questions in 11 groups: labs (rooms vs practicals), School vs department, schemes, college-wide (mess, canteen, fees, hostel, library, attendance, exams, ragging, clubs, NAAC), things the site doesn't cover (bus timings, JEE cutoff, other departments, IPL), "where is …", mandatory tasks, people and contacts, syllabus / timetable / notices, vague or misspelt questions, and follow-ups (a question that only makes sense after the previous one). Each says what a correct answer must contain (checked against the real data) or that the bot must say it doesn't know. `scripts/eval.py` asks them all and writes `data/eval_report.md` with every answer, which model gave it, and a score per group. The grading is keyword matching, so read the answers too; `--regrade` grades the last run again after a grader fix, without asking the AI again.
 
-**Results (30 Oct 2026):**
+**Results:**
 
 | Run | Data | Model | Score | Time per answer |
 |---|---|---|---|---|
-| Before fixes | IT pages only | local Ollama (`huihui-gemma`) | 43 / 55 | ~9 s |
-| After fixes | IT pages only | local Ollama | 54 / 55 | ~9 s |
-| **Final** | **IT + college pages** | **Groq (`openai/gpt-oss-120b`)** | **61 / 63** | **3.6 s median** |
+| Before fixes (30 Oct) | IT pages only | local Ollama (`huihui-gemma`) | 43 / 55 | ~9 s |
+| After fixes (30 Oct) | IT pages only | local Ollama | 54 / 55 | ~9 s |
+| College pages added (30 Oct) | IT + college pages | Groq (`openai/gpt-oss-120b`) | 61 / 63 | 3.6 s median |
+| **Latest (31 Oct)** | **+ follow-ups, whole-document mode** | **Groq (54) + Groq small (12)** | **62 / 66** | **5.4 s median** |
 
-Final run by group: labs 6/6 · School/department 6/6 · schemes 5/5 · college-wide 16/16 · not on the site 3/4 · where is 5/5 · mandatory tasks 5/6 · contacts 5/5 · syllabus/timetable/notices 6/6 · vague/typos 4/4.
+Latest run by group: labs 6/6 · School/department 6/6 · schemes 5/5 · college-wide 15/16 · not on the site 3/4 · where is 4/5 · mandatory tasks 5/6 · contacts 5/5 · syllabus/timetable/notices 6/6 · vague/typos 4/4 · follow-ups 3/3.
 
-The two that still fail:
-- **"Who is the HOD of CSE?"**: CSE isn't covered, but a 2019 IT magazine names a "CSE & IT" head, and the model reports that instead of saying it doesn't know.
-- **"What is mandatory in 5th sem for the 2024 batch?"**: it lists the subjects, not the mandatory components (workshops, SIP, NEC), because the batch's syllabus outranks the scheme document.
-
-Found along the way: the 2026 B.Tech ordinance itself says **18** extra credits for Honours in one place (sec. 6.2, 160 + 18 = 178) and **20** in another; both answers are accepted.
-
-**Where:** `scripts/eval.py`, `scripts/eval_questions.json`. Run on the free Groq tier with a pause so every answer comes from the same model: `EVAL_PAUSE_SECONDS=20 LLM_PROVIDERS=groq,ollama uv run --no-sync scripts/eval.py` (about 40 minutes; without the pause about 10, but some answers then fall back to the local model).
+The four that still fail:
+- **"Who is the HOD of CSE?"**: CSE isn't covered, but a 2019 magazine names a "CSE & IT" head; the model reports that (with a warning that it's old) instead of saying it doesn't know.
+- **"What is mandatory in 5th sem for the 2024 batch?"**: it lists the subjects, not the mandatory components (workshops, SIP, NEC).
+- **"canteen me kya kya milta hai?"**: right content, but written in Hindi script instead of Hinglish in English letters.
+- **"Where is the HOD's cabin?"**: it answers "Room SH5" from an old 2021-22 document instead of saying the site doesn't say.
 
 ### 15. Nothing optional can crash it
 Reranker missing → search continues without it. AI down → next AI, or passages. OCR not installed → scanned pages skipped with a warning. Crawl stopped → old data kept. Each case has a test in `tests/`.
 
 ---
+
+### 16. Follow-up questions
+**Why:** students ask "and who was before him?" or "aur 3rd sem ka?", which mean nothing on their own.
+**What:** the chat page sends the last 3 questions and answers of this session (kept only in the browser). One short AI call rewrites the new question into a complete one, keeping the student's language; the search uses that. The page shows "Follow-up read as: …". No AI available → it searches with the previous question's words added. **Where:** `rag/followup.py`, `web/static/chat.js`.
+
+### 17. 👍 / 👎 on every answer
+**Why:** the test questions are ours; real students find other problems.
+**What:** a vote under each answer; 👎 opens an optional comment box ("no personal details"). Stored: the vote, the cited sources, which AI answered, the comment. Never the question. The admin page shows the % helpful, the sources most often in unhelpful answers, and the latest comments. **Where:** `POST /api/feedback`, `web/chatlog.py`, admin page.
+
+### 18. Whole-document mode
+**Why:** "how many groups…", "compare…" need the whole list, not the 5 best pieces of it.
+**What:** if the top 3 matches all come from one document of up to 12,000 characters, the AI gets that document whole, marked "whole document". It may count and compare across it, and anything it works out that the document doesn't say in words must start with "This suggests". Settings: `WHOLE_DOC_TOP_MATCHES`, `WHOLE_DOC_MAX_CHARS`. **Where:** `rag/retrieval.py` (`_whole_document`), prompt rule 13.
 
 ## Everyday commands
 
@@ -148,7 +159,7 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 | Rebuild only (after changing settings) | `uv run run_pipeline.py --skip-crawl` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | Start the website | `uv run -m web.app` → http://localhost:5000 |
-| Grade answers on the 63 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Grade answers on the 66 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
 | Answer your own list of questions | `uv run scripts/ask_batch.py questions.txt` → `data/eval_answers.md` |
 | Check the crawl got everything | `uv run scripts/check_crawl.py --live` |
 | See why a piece was / wasn't found | `uv run scripts/debug_retrieval.py "question" "expected text"` |
