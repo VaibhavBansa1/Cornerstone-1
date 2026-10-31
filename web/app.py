@@ -104,7 +104,7 @@ def status():
     return jsonify(
         {
             "index_ready": pipeline.index_exists(),
-            # e.g. "openrouter:google/gemma-4-31b-it:free -> ollama:llama3.1"
+            # e.g. "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free -> ollama:llama3.1"
             "provider": llm.describe_chain(),
             "embedding_model": config.EMBEDDING_MODEL_NAME,
             "index_built_with": info.get("embedding_model"),
