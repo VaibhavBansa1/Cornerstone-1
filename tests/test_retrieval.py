@@ -261,7 +261,7 @@ def test_this_sessions_timetables_win_when_no_semester_is_given():
     from rag.retrieval import _session_bonus
 
     today = date(2026, 11, 3)
-    u = understand("college kitne baje se kitne baje?", today=today)
+    u = understand("What are the college timings?", today=today)
     assert _session_bonus({"date": "2026-07-27"}, u, today) > 0
     assert _session_bonus({"date": "2025-02-01"}, u, today) == 0
     assert _session_bonus({"date": "2026-07-27"}, understand("5th sem time table", today=today), today) == 0

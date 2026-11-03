@@ -245,10 +245,6 @@ QUERY_SYNONYMS = {
     "mandatory": ["compulsory", "mandatory workshop", "audit", "skill internship",
                   "novel engaging course", "semester proficiency", "mooc"],
     "compulsory": ["mandatory", "mandatory workshop", "skill internship", "novel engaging course"],
-    # "college kitne baje?": class hours are only in the timetables' top row (09:00-10:00 ...).
-    "timing": ["time table", "timetable", "09:00"],
-    "timings": ["time table", "timetable", "09:00"],
-    "baje": ["time table", "timing", "09:00"],
 }
 
 # Questions about these topics always search the matching page of the
@@ -358,6 +354,13 @@ PROVIDER_SETTINGS = {
         "think": _env("OLLAMA_THINK", "false").lower() in ("1", "true", "yes"),
     },
 }
+
+# Reading the question with AI ("paanchve sem ka routine" -> timetable, sem 5)
+# when the rules can't: a short call to these providers only, in order.
+# Local models are left out on purpose (they would load onto the GPU);
+# QUESTION_AI_PROVIDERS=none switches it off, the rules then work alone.
+QUESTION_AI_PROVIDERS = [n.strip() for n in _env("QUESTION_AI_PROVIDERS", "groq_small,groq,openrouter").split(",")
+                         if n.strip() and n.strip().lower() != "none"]
 
 # Back-compat names used by older code/docs.
 OLLAMA_BASE_URL = PROVIDER_SETTINGS["ollama"]["base_url"]

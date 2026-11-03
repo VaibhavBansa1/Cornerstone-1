@@ -47,6 +47,7 @@ import numpy as np
 
 import config
 from rag import roles
+from rag.doc_labels import label_documents
 
 log = logging.getLogger("rag.retrieval")
 
@@ -243,6 +244,14 @@ class HybridRetriever:
         self._by_source: dict[str, list[dict]] = defaultdict(list)
         for c in chunks:
             self._by_source[c["source_url"]].append(c)
+        # What each document is (type, semester, session), read from its header.
+        self.labels = label_documents(self._by_source)
+        self._first_chunk = {}  # source -> index of its first real piece
+        for i, c in enumerate(chunks):
+            if c.get("chunk_index", 0) >= 0:
+                best = self._first_chunk.get(c["source_url"])
+                if best is None or c.get("chunk_index", 0) < chunks[best].get("chunk_index", 0):
+                    self._first_chunk[c["source_url"]] = i
 
     def _vector_search(self, query: str, top_n: int) -> list[tuple[int, float]]:
         if self.index is None or self.embedder is None:
@@ -343,6 +352,51 @@ class HybridRetriever:
             return None
         return self._whole([c for c in self.chunks if c.get("title") == f"{page} - MITS Gwalior"], topic_page=True)
 
+    def labelled_documents(self, understanding, doc_type: str) -> list[str]:
+        """Documents whose own header says they are ``doc_type`` for the
+        semester asked about, best first: the session asked about (or the
+        newest), then the newest date."""
+        if understanding is None or not understanding.semester:
+            return []
+        found = [url for url, lab in self.labels.items()
+                 if lab.type == doc_type and understanding.semester in lab.semesters
+                 and lab.programme in (None, understanding.programme)]
+        def rank(url):
+            lab, first = self.labels[url], self._by_source[url][0]
+            return (lab.session == understanding.session, first.get("date") or "")
+        return sorted(found, key=rank, reverse=True)
+
+    def _session_timetables(self, understanding) -> list[int]:
+        """"College kitne baje?" / "class timings": no semester, so the
+        class timetables of the session running now (their top row has the
+        period times): the first piece of the newest two."""
+        if (understanding is None or getattr(understanding, "topic", None) != "timetable"
+                or understanding.semester or not understanding.session):
+            return []
+        urls = [url for url, lab in self.labels.items()
+                if lab.type == "timetable" and lab.session == understanding.session
+                and lab.programme in (None, understanding.programme) and url in self._first_chunk]
+        urls.sort(key=lambda u: self._by_source[u][0].get("date") or "", reverse=True)
+        return [self._first_chunk[u] for u in urls[:2]]
+
+    def _labelled_timetable(self, understanding) -> dict | None:
+        """"5th sem timetable": the class timetable whose header says
+        Semester-V for the session asked about, given WHOLE (a timetable is
+        short, and pieces of a grid lose which hour is which)."""
+        doc_type = {"timetable": "timetable", "exam": "exam_timetable"}.get(getattr(understanding, "topic", None))
+        if not doc_type:
+            return None
+        for url in self.labelled_documents(understanding, doc_type)[:1]:
+            doc = self._whole(self._by_source[url], whole_document=True, labelled=True)
+            if doc is not None and len(doc["text"]) <= config.WHOLE_DOC_MAX_CHARS:
+                doc["date"] = self._by_source[url][0].get("date")
+                # The grid has course codes only; the course list names them.
+                names = [c["text"] for c in self._by_source[url] if c.get("chunk_index", 0) < 0]
+                if names:
+                    doc["text"] += "\n\n" + "\n".join(names)
+                return doc
+        return None
+
     def _whole_document(self, scored: list) -> dict | None:
         """If the best few matches all come from ONE document, the question is
         about that document: return all of it as one source (if it is small
@@ -371,7 +425,8 @@ class HybridRetriever:
         vector_hits = self._vector_search(query, n)
         newest_roles = self._newest_role_mentions(query, keyword_wide)
         batch_hits = [i for i in self._batch_matches(understanding, keyword_wide) if i not in newest_roles]
-        pinned = newest_roles + batch_hits
+        session_tt = [i for i in self._session_timetables(understanding) if i not in newest_roles + batch_hits]
+        pinned = newest_roles + batch_hits + session_tt
 
         # Reciprocal Rank Fusion, then make sure the pinned chunks (newest
         # role mentions, documents for the understood batch) are candidates.
@@ -413,10 +468,15 @@ class HybridRetriever:
             bonus = recency_bonus(chunk.get("date"), today)
             # Right batch/semester (+), a different batch's document (-).
             match = understanding.label_matches(chunk.get("link_label", "")) if understanding is not None else 0
-            if match == 0 and understanding is not None:  # timetables: semester from the file name
+            if match == 0 and understanding is not None:  # what the document's own header says
+                match = understanding.doc_matches(self.labels.get(chunk["source_url"]))
+            if match == 0 and understanding is not None:  # else the file name ("5th sem TT.pdf")
                 match = understanding.title_matches(chunk.get("title", ""))
             batch_bonus = config.BATCH_MATCH_BONUS * match
-            batch_bonus += _session_bonus(chunk, understanding, today) - _downrank(chunk, query)
+            lab = self.labels.get(chunk["source_url"])
+            if lab is None or lab.type == "timetable":  # this session's CLASS timetables, not every new notice
+                batch_bonus += _session_bonus(chunk, understanding, today)
+            batch_bonus -= _downrank(chunk, query)
             chunk["relevance"] = round(float(relevance[idx]), 4)
             chunk["recency_bonus"] = round(bonus, 4)
             chunk["batch_bonus"] = round(batch_bonus, 4)
@@ -440,7 +500,8 @@ class HybridRetriever:
             results.append(c)
         results.sort(key=lambda c: c["score"], reverse=True)
 
-        page = self._topic_page(understanding) or self._whole_document(scored)
+        page = (self._topic_page(understanding) or self._labelled_timetable(understanding)
+                or self._whole_document(scored))
         if page is not None:  # the whole page/document replaces its pieces
             results = [page] + [c for c in results if c["source_url"] != page["source_url"]][:top_k - 1]
         return results
