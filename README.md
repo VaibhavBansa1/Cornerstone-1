@@ -10,6 +10,11 @@ It reads every page and PDF, gives every piece of text a date, and answers with 
 
 ![Architecture](docs/architecture/architecture.png)
 
+| | |
+|---|---|
+| ![Who is the HOD? The current Dean, with sources](docs/screenshots/1-hod-current-dean.jpg) | ![5th sem syllabus for the right batch](docs/screenshots/2-syllabus-by-batch.jpg) |
+| ![Hinglish question, Hinglish answer](docs/screenshots/3-hinglish-hostel.jpg) | ![Says so when the website doesn't cover it](docs/screenshots/4-honest-not-covered.jpg) |
+
 ## Quick start
 
 **Windows, one command:** `powershell -ExecutionPolicy Bypass -File .\run_demo.ps1` sets everything up and starts it (CPU only). Step by step and how to update: [HOW_TO_RUN.md](HOW_TO_RUN.md).
