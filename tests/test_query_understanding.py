@@ -51,3 +51,17 @@ def test_college_hours_questions_are_timetable_questions_for_the_current_session
     for q in ("College kitne baje se kitne baje tak hai?", "What are the class timings?"):
         u = understand(q, today=date(2026, 11, 3))
         assert u.topic == "timetable" and u.session == "July-Dec 2026" and not u.semester
+
+
+def test_semester_is_read_from_timetable_file_names():
+    from datetime import date
+
+    from rag.query_understanding import understand
+
+    u = understand("What is the timetable for B.Tech IT 5th semester?", today=date(2026, 11, 3))
+    assert u.title_matches("Time Table - MITS Gwalior - View More Details - 5th sem TT.pdf") == 1
+    assert u.title_matches("Time Table - MITS Gwalior - View More Details - 2nd semMaster TimeTable Jan 2026.pdf") == -1
+    assert u.title_matches("Time Table - View More Details - 6th Revised Master TimeTable Jan 2026.pdf") == -1
+    assert u.title_matches("Time Table - Remedial Classes TT Jan june 2025 (1).pdf") == 0
+    assert u.title_matches("Time Table - II MID SEM TIME TABLE II AND III YEAR (1).pdf") == 0
+    assert understand("college timings").title_matches("x - 2nd sem TT.pdf") == 0

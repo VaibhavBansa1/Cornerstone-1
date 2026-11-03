@@ -139,6 +139,21 @@ class Understanding:
             return question.replace(self.year_phrase, f"{ORDINAL[self.semester]} sem")
         return question
 
+    def title_matches(self, title: str) -> int:
+        """Semester named in a document's FILE name ("5th sem TT.pdf",
+        "2nd semMaster TimeTable", "Semester-IV"): +1 same semester as asked,
+        -1 a different one, 0 none. For documents without a batch label
+        (timetables are linked as "View More Details")."""
+        if not self.semester or not title:
+            return 0
+        name = title.rsplit(" - ", 1)[-1]
+        m = (re.search(r"\b([1-8])(?:st|nd|rd|th)\b", name, re.I)
+             or re.search(r"\bsem(?:ester)?[\s-]*(VIII|VII|VI|IV|V|III|II|I)\b", name, re.I))
+        if not m or re.search(r"\byear\b", name, re.I):
+            return 0
+        sem = int(m.group(1)) if m.group(1).isdigit() else ROMAN[m.group(1).lower()]
+        return 1 if sem == self.semester else -1
+
     def label_matches(self, label: str) -> int:
         """+1: a document filed under this batch (and semester, if known);
         -1: filed under a DIFFERENT batch or semester; 0: no batch info."""

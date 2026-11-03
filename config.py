@@ -230,7 +230,7 @@ QUERY_SYNONYMS = {
     "head": ["hod", "dean"],
     "dean": ["head", "hod"],
     "tt": ["time table", "timetable"],
-    "timetable": ["time table", "time-table"],
+    "timetable": ["time table", "time-table", "tt"],
     "syllabus": ["scheme", "curriculum"],
     "sem": ["semester"],
     "prof": ["professor"],
