@@ -413,6 +413,8 @@ class HybridRetriever:
             bonus = recency_bonus(chunk.get("date"), today)
             # Right batch/semester (+), a different batch's document (-).
             match = understanding.label_matches(chunk.get("link_label", "")) if understanding is not None else 0
+            if match == 0 and understanding is not None:  # timetables: semester from the file name
+                match = understanding.title_matches(chunk.get("title", ""))
             batch_bonus = config.BATCH_MATCH_BONUS * match
             batch_bonus += _session_bonus(chunk, understanding, today) - _downrank(chunk, query)
             chunk["relevance"] = round(float(relevance[idx]), 4)
