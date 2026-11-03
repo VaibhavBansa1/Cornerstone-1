@@ -196,9 +196,7 @@ LlamaIndex is a toolbox that contains these same parts (chunking, hybrid search,
 An earlier crawl had been stopped after 2 minutes; the complete manifest survived and all files were intact. Since then, stopping can no longer leave half-written files (tested in `tests/test_crawler_robustness.py`).
 
 ## Still to solve
-1. **The local Ollama model (12B) is the weakest link.** With the right sources in front of it, it still sometimes calls a former HOD current. For the demo, use a larger model: `LLM_PROVIDERS=groq,openrouter,ollama` with a key.
-2. **Re-crawling costs time.** Re-checking only the ~30 department pages and downloading just new links (a "link diff") would make daily updates nearly free. The OCR cache already makes unchanged PDFs free.
-3. **Big Google Drive files** (over 25 MB) are skipped; 1 right now.
-4. **Follow-up questions:** each question is answered alone ("and who was before him?" won't work yet).
-5. **"This semester / my batch":** the bot doesn't know who is asking, so "this semester" gets a general answer. Asking "5th sem" or "2024 batch" works.
-6. **Admin password:** the default is `mits-admin`; set `ADMIN_PASSWORD` before any demo on a shared network.
+See [NEXT_STEPS.md](NEXT_STEPS.md). In short:
+1. **Timetable grid:** plain PDF text drops empty cells, so the AI can put a class in the wrong hour (e.g. 09:00 instead of 11:00). Fix: read each word's position and put it under its time column, then rebuild.
+2. **College hours** should come from the periods that have classes (about 10:00–5:00/6:00), not the 09:00–06:00 header (09:00 is a buffer).
+3. Admin password, a fixed public link, link-diff re-crawls, Drive files over 25 MB, "this semester / my batch".
