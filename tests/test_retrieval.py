@@ -243,3 +243,50 @@ def test_whole_documents_are_marked_in_the_prompt():
     ctx = build_context([{"source_url": "u", "source_type": "pdf", "title": "List", "date": None,
                           "text": "rows", "whole_document": True}])
     assert "whole document" in ctx.splitlines()[0]
+
+
+def test_remedial_timetables_only_answer_questions_that_name_them():
+    from rag.retrieval import _downrank
+
+    remedial = {"title": "Time Table - Remedial Classes TT Jan june 2025.pdf"}
+    assert _downrank(remedial, "college timings") > 0
+    assert _downrank(remedial, "remedial class timings") == 0
+    assert _downrank({"title": "Time Table - 3rd sem TT.pdf"}, "college timings") == 0
+
+
+def test_this_sessions_timetables_win_when_no_semester_is_given():
+    from datetime import date
+
+    from rag.query_understanding import understand
+    from rag.retrieval import _session_bonus
+
+    today = date(2026, 11, 3)
+    u = understand("college kitne baje se kitne baje?", today=today)
+    assert _session_bonus({"date": "2026-07-27"}, u, today) > 0
+    assert _session_bonus({"date": "2025-02-01"}, u, today) == 0
+    assert _session_bonus({"date": "2026-07-27"}, understand("5th sem time table", today=today), today) == 0
+
+
+def test_all_faculty_questions_get_a_name_and_designation_list():
+    from rag.retrieval import faculty_roster
+
+    page = [{"title": "Faculty Profiles - MITS Gwalior", "source_url": "u", "source_type": "page", "chunk_index": i,
+             "date": "2025-10-24", "text": t} for i, t in enumerate([
+        "DR. PUNIT KUMAR JOHARI\nDesignation: Associate Professor & Dean\nQualification: Ph.D.",
+        "VIKAS SEJWAR\nDesignation: Assistant Professor\nE-Mail: x",
+        "SEJWAR\nDesignation: Assistant Professor\nQualification: M. Tech",   # chunk starting mid-name
+        "Dr. R.K. SINGH\nDesignation: Assistant Professor\nPublished in Vol 5: pp 1-2\nDesignation: none",
+        "Prof. Aradhana Saxena\nDesignation: Assistant Professor"])]
+    roster = faculty_roster(page)
+    text = roster["text"]
+    assert "Dr. Punit Kumar Johari: Associate Professor & Dean" in text
+    assert "Vikas Sejwar" in text and "\n- Sejwar" not in text
+    assert "Dr. R.K. Singh" in text and "Prof. Aradhana Saxena" in text and "(4 people" in text
+    assert roster["topic_page"]
+
+
+def test_faculty_list_questions_are_not_hod_questions():
+    from rag.query_understanding import understand
+
+    assert understand("What are the names of all the faculty members?").topic == "faculty_list"
+    assert understand("Who is the HOD of IT?").topic == "faculty"

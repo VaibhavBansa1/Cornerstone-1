@@ -41,3 +41,13 @@ def test_description_and_document_label_matching():
 def test_in_the_even_semester_session_years_shift():
     u = understand("3rd year syllabus", date(2027, 2, 1))
     assert (u.semester, u.batch, u.session) == (6, 2024, "Jan-June 2027")
+
+
+def test_college_hours_questions_are_timetable_questions_for_the_current_session():
+    from datetime import date
+
+    from rag.query_understanding import understand
+
+    for q in ("College kitne baje se kitne baje tak hai?", "What are the class timings?"):
+        u = understand(q, today=date(2026, 11, 3))
+        assert u.topic == "timetable" and u.session == "July-Dec 2026" and not u.semester

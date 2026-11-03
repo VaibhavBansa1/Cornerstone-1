@@ -20,7 +20,9 @@ MAX_ANSWER_CHARS = 500
 REWRITE_PROMPT = """You rewrite a student's latest chat message so it can be understood on its own, without the earlier conversation.
 Replace words like "he", "him", "that", "it", "uske", "woh" and short follow-ups like "and 3rd sem?" with what they refer to in the conversation.
 Keep the student's language and style (English, Hinglish or Hindi). Do not answer the question. Do not add facts that are not in the conversation.
-If the latest message is already complete on its own, return it unchanged.
+If the latest message corrects or points to a source ("it's in the time table", "di hai time table mai"), combine it with the student's previous question into one question.
+Always write a QUESTION the student is asking (ending with "?"), never a statement.
+If the latest message is already a complete question on its own, return it unchanged.
 Reply with the rewritten question only, on one line."""
 
 
