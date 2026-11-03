@@ -12,6 +12,8 @@ MITS Help Desk: a chatbot for MITS Gwalior students. A crawler collects the IT d
 | `README.md` | Install, API keys, everyday commands, settings |
 | `docs/architecture/architecture.md` | How it works, diagrams, every design decision (D1-D22) and why |
 | `docs/FEATURES.md` | Each feature: why / what / where in the code; test results |
+| `docs/NEXT_STEPS.md` | **Open work and the plan for each item: start here when continuing** |
+| `docs/REUSE.md` | Using the pipeline for another site or your own files; what is MITS-specific |
 | `config.py` | Every setting (each can be overridden by an environment variable of the same name) |
 
 ## Code map
@@ -35,4 +37,5 @@ MITS Help Desk: a chatbot for MITS Gwalior students. A crawler collects the IT d
 - The bot answers only from the crawled sources and must say when they don't cover something; don't add facts to prompts or code.
 - Don't add students' personal documents or name lists to the data.
 - Keep docs short and plain; update `docs/FEATURES.md` and the decision table when behaviour changes.
-- Run the tests after every change.
+- Run the tests after every change, and `uv run scripts/eval.py --sources` after search changes.
+- On the owner's PC: don't use the GPU or the local Ollama model for tests without asking (run with `EMBEDDING_DEVICE=cpu`), and keep Groq-heavy test runs short.

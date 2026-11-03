@@ -69,7 +69,8 @@ Free model names change over time; override the `*_MODEL` variable if a default 
 | Crawl only / chunks only / index only | `uv run -m scraper.crawler` · `uv run -m ingestion.build` · `uv run -m rag.embed_index` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | See exactly what the AI receives | `uv run -m rag.pipeline --show-prompt "question"` |
-| Grade the 66 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Grade the test questions (78) | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Check search finds the right documents (no answers) | `uv run scripts/eval.py --sources` |
 | Run tests | `uv run pytest tests -q` |
 
 More checking tools (crawl, links, retrieval debugging, batch answers) are listed in [docs/FEATURES.md](docs/FEATURES.md#everyday-commands).
@@ -81,6 +82,11 @@ More checking tools (crawl, links, retrieval debugging, batch answers) are liste
 ## Settings
 
 Every setting is in `config.py` and can be overridden with an environment variable of the same name, e.g. `EMBEDDING_DEVICE=cpu`, `RERANKER_MODEL=none` (faster on a slow laptop), `OCR_ENGINE=rapidocr`, `ADMIN_PASSWORD=...` (default `mits-admin`; change it before any shared demo).
+
+## Reuse it, and what's next
+
+- **Another website or your own files:** the scraper, ingestion and RAG stages are separate. See [docs/REUSE.md](docs/REUSE.md).
+- **Open work** (timetable grid read cell by cell, college hours from real classes): [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
 
 ## Scope and privacy
 
