@@ -544,7 +544,8 @@
    "not": [
     "do not contain a specific timetable",
     "not listed"
-   ]
+   ],
+   "src": "5th sem TT"
   },
   {
    "id": "aca3",
@@ -837,6 +838,170 @@
    "min_any": 2,
    "not": [
     "remedial"
+   ]
+  },
+  {
+   "id": "chip1",
+   "cat": "Timetables (any wording)",
+   "q": "What is the timetable for B.Tech IT 5th semester?",
+   "expect": "answer",
+   "src": "5th sem TT",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem",
+    "16243"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt5a",
+   "cat": "Timetables (any wording)",
+   "q": "5th sem TT",
+   "expect": "answer",
+   "src": "5th sem TT",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem",
+    "16243"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt5b",
+   "cat": "Timetables (any wording)",
+   "q": "paanchve sem ka routine dikhao",
+   "expect": "answer",
+   "src": "5th sem TT",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem",
+    "16243"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt5c",
+   "cat": "Timetables (any wording)",
+   "q": "V semester class schedule",
+   "expect": "answer",
+   "src": "5th sem TT",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem",
+    "16243"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt5d",
+   "cat": "Timetables (any wording)",
+   "q": "third year IT timetable please",
+   "expect": "answer",
+   "src": "5th sem TT",
+   "any": [
+    "115",
+    "semester-?\\s?V\\b",
+    "V sem",
+    "5th sem",
+    "16243"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt7",
+   "cat": "Timetables (any wording)",
+   "q": "7th sem time table",
+   "expect": "answer",
+   "src": "7th sem TT",
+   "any": [
+    "semester-?\\s?VII",
+    "7th sem",
+    "VII sem",
+    "1624"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt1",
+   "cat": "Timetables (any wording)",
+   "q": "first sem ka timetable kya hai?",
+   "expect": "answer",
+   "src": "1st sem TT",
+   "any": [
+    "semester-?\\s?I\\b",
+    "1st sem",
+    "I sem",
+    "1626"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "tt3",
+   "cat": "Timetables (any wording)",
+   "q": "2nd year ka timetable",
+   "expect": "answer",
+   "src": "3rd sem TT",
+   "any": [
+    "semester-?\\s?III",
+    "3rd sem",
+    "III sem",
+    "1625"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
+   ]
+  },
+  {
+   "id": "mt3",
+   "cat": "Timetables (any wording)",
+   "q": "M.Tech 3rd semester timetable",
+   "expect": "answer",
+   "src": "M\\.?Tech III",
+   "any": [
+    "M\\.?\\s?Tech"
+   ],
+   "not": [
+    "do not contain a specific timetable",
+    "not listed",
+    "no specific"
    ]
   }
  ]

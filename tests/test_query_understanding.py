@@ -48,9 +48,17 @@ def test_college_hours_questions_are_timetable_questions_for_the_current_session
 
     from rag.query_understanding import understand
 
-    for q in ("College kitne baje se kitne baje tak hai?", "What are the class timings?"):
-        u = understand(q, today=date(2026, 11, 3))
-        assert u.topic == "timetable" and u.session == "July-Dec 2026" and not u.semester
+    from rag.query_understanding import apply_ai, needs_ai
+
+    today = date(2026, 11, 3)
+    u = understand("What are the class timings?", today=today)
+    assert u.topic == "timetable" and u.session == "July-Dec 2026" and not u.semester
+    # "baje" and "library timings" are left to the AI reading
+    u = understand("College kitne baje se kitne baje tak hai?", today=today)
+    assert u.topic is None and needs_ai(u)
+    u = apply_ai(u, {"topic": "timetable"}, today)
+    assert u.topic == "timetable" and u.session == "July-Dec 2026" and not u.semester
+    assert understand("What are the library timings?", today=today).topic is None
 
 
 def test_semester_is_read_from_timetable_file_names():
@@ -65,3 +73,31 @@ def test_semester_is_read_from_timetable_file_names():
     assert u.title_matches("Time Table - Remedial Classes TT Jan june 2025 (1).pdf") == 0
     assert u.title_matches("Time Table - II MID SEM TIME TABLE II AND III YEAR (1).pdf") == 0
     assert understand("college timings").title_matches("x - 2nd sem TT.pdf") == 0
+
+
+def test_ai_reading_fills_what_the_rules_miss():
+    from rag.query_understanding import apply_ai, needs_ai
+
+    today = date(2026, 11, 3)
+    u = understand("paanchve sem ka routine dikhao", today=today)
+    assert u.semester == 5 and u.topic is None and needs_ai(u)
+    u = apply_ai(u, {"topic": "timetable", "semester": 5, "english": "5th semester timetable"}, today)
+    assert u.topic == "timetable" and u.batch == 2024 and u.session == "July-Dec 2026"
+    assert "timetable" in u.search_terms()
+
+    u = understand("final yr ka TT bhejo", today=today)
+    u = apply_ai(u, {"topic": "timetable", "year_of_study": 4}, today)
+    assert u.semester == 7 and u.session == "July-Dec 2026"
+
+
+def test_rules_win_and_bad_ai_replies_are_ignored():
+    from rag.query_understanding import apply_ai, needs_ai
+
+    today = date(2026, 11, 3)
+    u = understand("5th sem time table", today=today)
+    assert not needs_ai(u)
+    u = apply_ai(u, {"topic": "exam", "semester": 3}, today)       # rules already knew both
+    assert (u.topic, u.semester) == ("timetable", 5)
+    u = apply_ai(understand("hello", today=today), {"topic": "weather", "semester": "nine"}, today)
+    assert u.topic is None and u.semester is None
+    assert apply_ai(understand("hello", today=today), None, today).topic is None

@@ -3,9 +3,13 @@
     python scripts/eval.py              # all questions in scripts/eval_questions.json
     python scripts/eval.py lab1 out3    # only these ids
     python scripts/eval.py --regrade    # grade the last run again, no AI calls
+    python scripts/eval.py --sources    # only check that search finds the right
+                                        # documents ("src"); no answers written
 
 Each question says what a good answer must contain (or that the bot should
-say it doesn't know). Grading is simple pattern matching, so read the
+say it doesn't know), and may name the document that must be among its
+sources ("src", a pattern matched against source titles): an answer that
+merely uses the right words from the wrong document then still fails. Grading is simple pattern matching, so read the
 answers in the report too -- it is a quick check, not a judge.
 
 Every run is saved to data/eval/<time>.json; the report
@@ -22,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config  # noqa: E402
-from rag.pipeline import answer  # noqa: E402
+from rag.pipeline import answer, order_for_prompt, retrieve, understand_question  # noqa: E402
 
 QUESTIONS = Path(__file__).with_name("eval_questions.json")
 RUNS_DIR = config.DATA_DIR / "eval"
@@ -41,7 +45,11 @@ UNKNOWN = re.compile(
 )
 
 
-def grade(item: dict, text: str) -> tuple[bool, str]:
+def source_ok(item: dict, sources: list[str]) -> bool:
+    return not item.get("src") or any(re.search(item["src"], s, re.I) for s in sources)
+
+
+def grade(item: dict, text: str, sources: list[str] | None = None) -> tuple[bool, str]:
     # Some models write don’t, narrow spaces and non-breaking hyphens.
     for odd, plain in (("\u2019", "'"), ("\u2018", "'"), ("\u202f", " "), ("\u00a0", " "),
                        ("\u2009", " "), ("\u2011", "-"), ("\u2010", "-"), ("\u2013", "-")):
@@ -49,6 +57,8 @@ def grade(item: dict, text: str) -> tuple[bool, str]:
     def found(p):
         return re.search(p, text, re.I)
 
+    if sources is not None and not source_ok(item, sources):
+        return False, f"right document /{item['src']}/ not in the sources"
     bad = [p for p in item.get("not", []) if found(p)]
     if bad:
         return False, f"says something it shouldn't: /{bad[0]}/"
@@ -77,20 +87,38 @@ def regrade_latest():
     latest = json.loads(runs[-1].read_text(encoding="utf-8"))
     for r in latest["results"]:
         if r["id"] in questions:
-            r["pass"], r["why"] = grade(questions[r["id"]], r["answer"])
+            r["pass"], r["why"] = grade(questions[r["id"]], r["answer"], r.get("sources"))
     runs[-1].write_text(json.dumps(latest, indent=1, ensure_ascii=False), encoding="utf-8")
     before = {r["id"]: r for r in json.loads(runs[-2].read_text(encoding="utf-8"))["results"]} if len(runs) > 1 else {}
     write_report(latest["results"], before, latest["time"])
     print(f"{sum(r['pass'] for r in latest['results'])}/{len(latest['results'])} passed (regraded). Report: {REPORT}")
 
 
+def check_sources(data):
+    """Search only: is the named document among the sources? Fast, and the
+    only AI call is the short question reading (when the rules need it)."""
+    data = [q for q in data if q.get("src")]
+    passed = 0
+    for item in data:
+        u = understand_question(item["q"])
+        titles = [s.get("title") or s["source_url"] for s in order_for_prompt(retrieve(item["q"], understanding=u))]
+        ok = source_ok(item, titles)
+        passed += ok
+        print(f"{'PASS' if ok else 'FAIL'}  {item['id']:6s} {item['q']}  [{u.describe()}]", flush=True)
+        if not ok:
+            print("        got:", " | ".join(t.rsplit(" - ", 1)[-1][:40] for t in titles))
+    print(f"\n{passed}/{len(data)} found the right document")
+
+
 def main():
     if "--regrade" in sys.argv:
         return regrade_latest()
     data = json.loads(QUESTIONS.read_text(encoding="utf-8"))["questions"]
-    only = set(sys.argv[1:])
+    only = {a for a in sys.argv[1:] if not a.startswith("--")}
     if only:
         data = [q for q in data if q["id"] in only]
+    if "--sources" in sys.argv:
+        return check_sources(data)
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     previous = sorted(RUNS_DIR.glob("*.json"))
     before = {}
@@ -107,7 +135,7 @@ def main():
         started = time.perf_counter()
         r = answer(item["q"], history=item.get("history"))
         secs = time.perf_counter() - started
-        ok, why = grade(item, r["answer"])
+        ok, why = grade(item, r["answer"], [s.get("title") or s["source_url"] for s in r["sources"]])
         results.append({
             "id": item["id"], "cat": item["cat"], "q": item["q"], "expect": item["expect"],
             "pass": ok, "why": why, "secs": round(secs, 1), "provider": r["provider"],

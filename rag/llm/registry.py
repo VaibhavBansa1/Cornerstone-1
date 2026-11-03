@@ -91,11 +91,14 @@ def describe_chain() -> str:
     return " -> ".join(chain) if chain else "none"
 
 
-def generate(system: str, user: str, on_attempt=None) -> Reply:
+def generate(system: str, user: str, on_attempt=None, only: list[str] | None = None) -> Reply:
     """on_attempt(provider_name, previous_error_or_None) is called before
-    each provider is tried (the chat page shows it as progress)."""
+    each provider is tried (the chat page shows it as progress).
+    ``only``: try just these providers (configured ones, in this order)."""
     errors: list[str] = []
-    for provider in active_providers():
+    providers = active_providers() if only is None else [
+        get_provider(n) for n in only if n in config.PROVIDER_SETTINGS and get_provider(n).is_configured()]
+    for provider in providers:
         if _cooldown_until.get(provider.name, 0) > time.time():
             errors.append(f"{provider.name}: skipped (cooling down after a rate limit)")
             continue

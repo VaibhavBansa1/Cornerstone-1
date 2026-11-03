@@ -52,8 +52,10 @@ TOPICS = {
     "syllabus": ("syllabus", "syllabi", "subjects", "subject", "courses", "course", "curriculum", "scheme", "papers"),
     "faculty_list": ("faculty members", "all faculty", "faculty list", "list of faculty", "faculty names",
                      "names of faculty", "teachers", "professors", "staff members", "sabhi faculty"),
+    # Not "timing"/"baje": library, bus and mess have timings too. The AI
+    # reading (rag/question_ai.py) decides those questions.
     "timetable": ("timetable", "time table", "time-table", "tt", "schedule", "classes", "lecture",
-                  "timing", "timings", "baje", "college time", "class time"),
+                  "college time", "class time", "class timings", "college timings"),
     "exam": ("exam", "exams", "evaluation", "major", "minor", "mid sem", "midsem", "test", "paper"),
     "result": ("result", "results", "marks", "grade", "sgpa", "cgpa"),
     "contacts": ("contact", "contacts", "phone", "mobile", "email", "e-mail"),
@@ -99,8 +101,10 @@ class Understanding:
     batch: int | None = None           # admission year: 2024 = the 2024-28 batch
     session: str | None = None         # "July-Dec 2026"
     topic: str | None = None           # syllabus / timetable / exam / result / faculty
+    programme: str = "btech"           # "mtech" if the question says M.Tech
     notes: list[str] = field(default_factory=list)  # how each fact was worked out
     year_phrase: str | None = None     # "3rd year", replaced by "5th sem" for keyword search
+    ai_terms: list[str] = field(default_factory=list)  # English search words from the AI reading
 
     @property
     def batch_label(self) -> str | None:
@@ -130,7 +134,7 @@ class Understanding:
             terms += [str(self.batch), f"{(self.batch + 4) % 100:02d}", "batch"]
         if self.semester:
             terms += [str(self.semester), ORDINAL[self.semester], ROMAN_BY_NUM[self.semester].lower(), "sem"]
-        return terms
+        return terms + self.ai_terms
 
     def rewrite(self, question: str) -> str:
         """The question with "3rd year" replaced by "5th sem", so keyword
@@ -153,6 +157,22 @@ class Understanding:
             return 0
         sem = int(m.group(1)) if m.group(1).isdigit() else ROMAN[m.group(1).lower()]
         return 1 if sem == self.semester else -1
+
+    def doc_matches(self, doc) -> int:
+        """Compare with a document's own label (rag/doc_labels.py), read from
+        its header: +1 the semester asked about, -1 another semester or the
+        other programme (B.Tech vs M.Tech), 0 the document doesn't say."""
+        if doc is None or not self.semester or not doc.semesters:
+            return 0
+        if doc.programme and doc.programme != self.programme:
+            return -1
+        if self.semester not in doc.semesters:
+            return -1
+        # Right semester, but a syllabus is per batch and a timetable per
+        # session: only a match if nothing says it is another one.
+        if doc.type == "syllabus" or (doc.session and self.session and doc.session != self.session):
+            return 0
+        return 1
 
     def label_matches(self, label: str) -> int:
         """+1: a document filed under this batch (and semester, if known);
@@ -180,6 +200,9 @@ def understand(question: str, today: date | None = None) -> Understanding:
         if any(re.search(rf"\b{re.escape(n)}\b", q) for n in names):
             u.topic = word
             break
+
+    if re.search(r"\bm\.?\s?tech\b", q):
+        u.programme = "mtech"
 
     m = _SEM_BEFORE.search(question) or _SEM_AFTER.search(question)
     if m:
@@ -214,6 +237,13 @@ def understand(question: str, today: date | None = None) -> Understanding:
             u.batch = y
             u.notes.append(f"{y} read as the admission year")
 
+    return _complete(u, today)
+
+
+def _complete(u: Understanding, today: date) -> Understanding:
+    """Fill in what follows from what is known: semester -> batch, batch ->
+    semester, and the session."""
+    start = session_start_year(today)
     if u.semester and not u.batch:
         u.batch = batch_in(u.semester, today)
         u.notes.append(f"no year given, so the batch in {ORDINAL[u.semester]} sem now")
@@ -229,9 +259,61 @@ def understand(question: str, today: date | None = None) -> Understanding:
         u.notes.append("no semester given, so the current session")
     if u.semester:
         odd = u.semester % 2 == 1
-        if u.batch:
-            sess_start = u.batch + (u.semester - 1) // 2
-        else:
-            sess_start = start
+        sess_start = u.batch + (u.semester - 1) // 2 if u.batch else start
         u.session = session_label(sess_start, odd)
     return u
+
+
+# Topics the AI may set. The others (overview, contacts, labs...) swap in a
+# whole web page, so they are left to the rules' exact words.
+AI_TOPICS = ("timetable", "exam", "syllabus", "result", "faculty_list")
+
+
+def needs_ai(u: Understanding) -> bool:
+    """The rules found no topic, or a semester-type topic without a semester
+    ("paanchve sem ka routine", "final year TT"): worth asking the AI."""
+    return u.topic is None or (u.topic in ("timetable", "exam", "syllabus", "result") and not u.semester)
+
+
+def apply_ai(u: Understanding, ai: dict | None, today: date | None = None) -> Understanding:
+    """Add what the AI read from the question (rag/question_ai.py) where the
+    rules found nothing. The rules win when both found something: they are
+    exact for the wordings they know; the AI covers every other wording."""
+    if not ai:
+        return u
+    today = today or date.today()
+    used = False
+    topic = ai.get("topic")
+    if not u.topic and topic in AI_TOPICS:
+        u.topic, used = topic, True
+        u.notes.append(f"topic {topic} (read by AI)")
+    if ai.get("programme") == "mtech":
+        u.programme = "mtech"
+    sem, year, batch = (_int(ai.get(k), lo, hi) for k, lo, hi in
+                        (("semester", 1, 8), ("year_of_study", 1, 4), ("batch", 2000, today.year + 1)))
+    if not u.semester and not u.batch:
+        if sem:
+            u.semester, used = sem, True
+            u.notes.append(f"semester {sem} (read by AI)")
+        elif year:
+            u.semester, used = 2 * year - (1 if today.month >= 7 else 0), True
+            u.notes.append(f"year {year} of study = semester {u.semester} right now (read by AI)")
+        if batch:
+            u.batch, used = batch, True
+            u.notes.append(f"{batch} is the admission year (read by AI)")
+        if u.semester or u.batch:
+            u.session = None
+            u.notes = [n for n in u.notes if not n.startswith("no semester given")]
+    if used:  # the AI understood something the rules didn't: search with its English words too
+        asked = set(re.findall(r"[a-z0-9]+", str(ai.get("question", "")).lower()))
+        words = re.findall(r"[a-z0-9]+", str(ai.get("english") or "")[:120].lower())
+        u.ai_terms = [w for w in words if len(w) > 1 and w not in asked][:8]
+    return _complete(u, today)
+
+
+def _int(value, lo: int, hi: int) -> int | None:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if lo <= n <= hi else None

@@ -18,8 +18,9 @@ from datetime import date
 
 import config
 from ingestion.dates import label as date_label
-from rag import followup, llm
-from rag.query_understanding import Understanding, semester_of, session_start_year, understand
+from rag import followup, llm, question_ai
+from rag.query_understanding import (Understanding, apply_ai, needs_ai, semester_of, session_start_year,
+                                     understand)
 from rag.retrieval import HybridRetriever, load_retriever
 from rag.roles import role_timeline
 
@@ -173,6 +174,15 @@ def generate_answer(query: str, results: list[dict], today: date | None = None,
     return reply
 
 
+def understand_question(query: str) -> Understanding:
+    """Rules first; if they miss the topic or the semester, a short call to
+    an online model reads the question (rag/question_ai.py)."""
+    u = understand(query)
+    if needs_ai(u):
+        u = apply_ai(u, question_ai.read(query))
+    return u
+
+
 def answer(query: str, top_k: int = config.TOP_K, on_step=None, history=None) -> dict:
     """on_step(kind, data), if given, is called as each step starts, so the
     chat page can show progress: "rewritten" (a follow-up made complete),
@@ -193,7 +203,7 @@ def answer(query: str, top_k: int = config.TOP_K, on_step=None, history=None) ->
             step("rewritten", query)
 
     # Step 0: what is this about? (semester, batch, session, topic)
-    understanding = understand(query)
+    understanding = understand_question(query)
     step("understood", understanding.describe())
     step("searching", len(_get_retriever().chunks))
     results = order_for_prompt(retrieve(query, top_k=top_k, understanding=understanding))

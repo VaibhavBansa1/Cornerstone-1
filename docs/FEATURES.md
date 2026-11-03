@@ -154,6 +154,16 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 **Why:** many PDFs have a typed header over a scanned body (letters, notices, BoS pages): the typed part was read, the scanned part was lost.
 **What:** a page that is at least half picture and has under 1,000 typed characters is OCR'd too, and the longer text is kept (pages with a full hidden text layer are left alone). Each OCR'd PDF gets a confidence score; pages under 60% are marked "OCR unsure" on the admin page (type "ocr unsure" in its search box). Measured on the crawl: 299 pages with under 300 typed characters + 903 with 300–1,000; one test PDF went from 18,397 to 24,487 characters. **Where:** `ingestion/readers.py` (`partly_scanned_pages`), `ingestion/ocr.py`, settings `OCR_MIXED_*`, `OCR_LOW_CONFIDENCE`. Takes effect at the next data rebuild.
 
+### 20. Documents labelled from their own text
+**Why:** timetables are linked as "View More Details" and their file names vary ("5th sem TT.pdf", "jan 25 3rd.pdf", "jul24 5.pdf"), so search couldn't tell which semester a timetable is for. Adding words to lists never ends.
+**What:** when the index loads, each document's header is read once: type (class timetable / exam timetable / syllabus), B.Tech or M.Tech, semester, session ("Time-Table, B.Tech, IT Semester-V (Session: July-Dec 2026)"). A question about one semester's timetable gets that timetable **whole**, with its course list, so no hour is lost between pieces. Same semester but another session = no boost (recency decides); a syllabus is per batch, so the semester alone never boosts it. No data rebuild needed. **Where:** `rag/doc_labels.py`, `rag/retrieval.py` (`labelled_documents`, `_labelled_timetable`).
+
+### 21. The AI reads the question when the rules can't
+**Why:** "paanchve sem ka routine", "V semester class schedule", "college kitne baje": endless wordings.
+**What:** the rules run first (fast, free, exact). If they find no topic, or no semester for a timetable / exam / syllabus / result question, one short call to a small **online** model (`QUESTION_AI_PROVIDERS`, default `groq_small,groq,openrouter`; never a local GPU model) returns topic, semester, year, batch and an English search query as JSON. The rules win where both found something. No AI → the rules' reading is used. **Where:** `rag/question_ai.py`, `apply_ai` in `rag/query_understanding.py`.
+
+Tests now also check **sources**: a question can name the document that must be found (`"src"` in `scripts/eval_questions.json`), so an answer can't pass on the right words from the wrong file. `uv run scripts/eval.py --sources` checks just that, without writing answers.
+
 ## Everyday commands
 
 | Do this | Command |
@@ -165,7 +175,8 @@ Reranker missing → search continues without it. AI down → next AI, or passag
 | Rebuild only (after changing settings) | `uv run run_pipeline.py --skip-crawl` |
 | Ask from the terminal | `uv run -m rag.pipeline "Who is the HOD?"` |
 | Start the website | `uv run -m web.app` → http://localhost:5000 |
-| Grade answers on the 66 test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Grade answers on the test questions | `uv run scripts/eval.py` → `data/eval_report.md` |
+| Check search finds the right documents (no answers) | `uv run scripts/eval.py --sources` |
 | Answer your own list of questions | `uv run scripts/ask_batch.py questions.txt` → `data/eval_answers.md` |
 | Check the crawl got everything | `uv run scripts/check_crawl.py --live` |
 | See why a piece was / wasn't found | `uv run scripts/debug_retrieval.py "question" "expected text"` |
