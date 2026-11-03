@@ -217,6 +217,12 @@ NEWEST_ROLE_CHUNKS = 3
 RECENCY_WEIGHT = _env_float("RECENCY_WEIGHT", 0.15)
 # Text older than this many years gets no recency bonus at all.
 RECENCY_HORIZON_YEARS = 6
+# Timetable / exam questions without a semester: documents from the current
+# session (e.g. July-Dec 2026) get this bonus, so last year's timetables lose.
+CURRENT_SESSION_BONUS = _env_float("CURRENT_SESSION_BONUS", 0.15)
+# Special-purpose documents that should not answer general questions unless
+# the question names them (title word -> score taken away).
+DOWNRANK_TITLE_WORDS = {"remedial": 0.3}
 # Words students use that mean the same thing as words in the documents.
 # Used to widen the keyword search; add more as you notice gaps.
 QUERY_SYNONYMS = {
@@ -239,6 +245,10 @@ QUERY_SYNONYMS = {
     "mandatory": ["compulsory", "mandatory workshop", "audit", "skill internship",
                   "novel engaging course", "semester proficiency", "mooc"],
     "compulsory": ["mandatory", "mandatory workshop", "skill internship", "novel engaging course"],
+    # "college kitne baje?": class hours are only in the timetables' top row (09:00-10:00 ...).
+    "timing": ["time table", "timetable", "09:00"],
+    "timings": ["time table", "timetable", "09:00"],
+    "baje": ["time table", "timing", "09:00"],
 }
 
 # Questions about these topics always search the matching page of the
@@ -250,6 +260,9 @@ QUERY_SYNONYMS = {
 WHOLE_DOC_TOP_MATCHES = _env_int("WHOLE_DOC_TOP_MATCHES", 3)
 WHOLE_DOC_MAX_CHARS = _env_int("WHOLE_DOC_MAX_CHARS", 12000)
 
+# "All faculty" questions: a name + designation list is pulled from this
+# page (its full profiles are far too long to give the AI whole).
+FACULTY_PAGE_TITLE = "Faculty Profiles - MITS Gwalior"
 TOPIC_PAGES = {
     "labs": "Laboratories",
     "contacts": "Contacts",

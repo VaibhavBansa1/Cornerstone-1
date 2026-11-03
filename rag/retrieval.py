@@ -153,6 +153,62 @@ class Reranker:
         return raw.tolist()
 
 
+def _session_bonus(chunk: dict, understanding, today: date | None) -> float:
+    """Timetable / exam question with no semester: prefer documents dated in
+    the session running now ("college kitne baje?" -> this session's timetables)."""
+    if understanding is None or understanding.semester or understanding.batch \
+            or getattr(understanding, "topic", None) not in ("timetable", "exam"):
+        return 0.0
+    today = today or date.today()
+    start = date(today.year, 7, 1) if today.month >= 7 else date(today.year, 1, 1)
+    return config.CURRENT_SESSION_BONUS if (chunk.get("date") or "") >= start.isoformat() else 0.0
+
+
+def _downrank(chunk: dict, query: str) -> float:
+    """Remedial-class timetables etc. answer only questions that name them."""
+    title, q = (chunk.get("title") or "").lower(), query.lower()
+    return sum(v for w, v in config.DOWNRANK_TITLE_WORDS.items() if w in title and w not in q)
+
+
+_ROSTER_ROW = re.compile(r"(?m)^[ \t]*([^\n:]{3,60}?)[ \t]*\n[ \t]*Designation[ \t]*:[ \t]*([^\n]+)")
+_NAME_OK = re.compile(r"^[A-Za-z][A-Za-z. ]+$")
+_TITLE = re.compile(r"^(Dr|Mr|Mrs|Ms|Prof)\.?\s+", re.I)
+
+
+def _tidy_name(name: str) -> str:
+    """"DR. PUNIT KUMAR JOHARI" -> "Dr. Punit Kumar Johari" (initials like R.K. kept)."""
+    name = " ".join(name.split())
+    if any(w.isupper() and len(w) > 3 for w in name.split()):
+        name = " ".join(w if re.fullmatch(r"(?:[A-Z]\.)+[A-Z]?\.?", w) else w.capitalize() for w in name.split())
+    return _TITLE.sub(lambda m: m.group(1).capitalize() + ". ", name)
+
+
+def faculty_roster(chunks: list[dict]) -> dict | None:
+    """One short "who is on the faculty" chunk built from the Faculty Profiles
+    page: each profile starts with the name on the line before "Designation:"."""
+    page = sorted((c for c in chunks if c.get("title") == config.FACULTY_PAGE_TITLE),
+                  key=lambda c: c.get("chunk_index", 0))
+    people: dict[str, tuple[str, str]] = {}
+    for c in page:
+        for m in _ROSTER_ROW.finditer(c["text"]):
+            raw = m.group(1).strip()
+            if _NAME_OK.match(raw):
+                name = _tidy_name(raw)
+                key = _TITLE.sub("", name).lower().replace(".", "").replace(" ", "")
+                people.setdefault(key, (name, m.group(2).strip()))
+    # A chunk can start mid-profile ("SEJWAR" from "VIKAS SEJWAR"): drop such tails.
+    keys = list(people)
+    people = {k: v for k, v in people.items() if not any(o != k and o.endswith(k) for o in keys)}
+    if len(people) < 3:
+        return None
+    lines = [f"- {name}: {role}" for name, role in people.values()]
+    first = page[0]
+    return {**first, "chunk_index": -2, "topic_page": True, "relevance": 1.0, "recency_bonus": 0.0,
+            "batch_bonus": 0.0, "score": 1.0,
+            "text": f"Faculty of the School of Information Technology ({len(lines)} people, "
+                    f"as listed on the Faculty Profiles page):\n" + "\n".join(lines)}
+
+
 def recency_bonus(chunk_date: str | None, today: date | None = None) -> float:
     """0..RECENCY_WEIGHT: full bonus for this year, fading to 0 over the horizon."""
     if not chunk_date or config.RECENCY_WEIGHT <= 0:
@@ -278,6 +334,10 @@ class HybridRetriever:
         """The whole website page for the question's topic ("labs" -> the
         Laboratories page) as ONE source, see config.TOPIC_PAGES. These
         pages are short, and a list (all labs) is only useful complete."""
+        if getattr(understanding, "topic", None) == "faculty_list":
+            if not hasattr(self, "_roster"):
+                self._roster = faculty_roster(self.chunks)
+            return self._roster
         page = config.TOPIC_PAGES.get(getattr(understanding, "topic", None) or "")
         if not page:
             return None
@@ -354,6 +414,7 @@ class HybridRetriever:
             # Right batch/semester (+), a different batch's document (-).
             match = understanding.label_matches(chunk.get("link_label", "")) if understanding is not None else 0
             batch_bonus = config.BATCH_MATCH_BONUS * match
+            batch_bonus += _session_bonus(chunk, understanding, today) - _downrank(chunk, query)
             chunk["relevance"] = round(float(relevance[idx]), 4)
             chunk["recency_bonus"] = round(bonus, 4)
             chunk["batch_bonus"] = round(batch_bonus, 4)

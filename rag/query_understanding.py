@@ -50,11 +50,14 @@ _YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
 # Checked in this order; the first match is the topic.
 TOPICS = {
     "syllabus": ("syllabus", "syllabi", "subjects", "subject", "courses", "course", "curriculum", "scheme", "papers"),
-    "timetable": ("timetable", "time table", "time-table", "tt", "schedule", "classes", "lecture"),
+    "faculty_list": ("faculty members", "all faculty", "faculty list", "list of faculty", "faculty names",
+                     "names of faculty", "teachers", "professors", "staff members", "sabhi faculty"),
+    "timetable": ("timetable", "time table", "time-table", "tt", "schedule", "classes", "lecture",
+                  "timing", "timings", "baje", "college time", "class time"),
     "exam": ("exam", "exams", "evaluation", "major", "minor", "mid sem", "midsem", "test", "paper"),
     "result": ("result", "results", "marks", "grade", "sgpa", "cgpa"),
     "contacts": ("contact", "contacts", "phone", "mobile", "email", "e-mail"),
-    "faculty": ("faculty", "teacher", "teachers", "professor", "hod", "dean", "coordinator", "head"),
+    "faculty": ("faculty", "teacher", "professor", "hod", "dean", "coordinator", "head"),
     "labs": ("lab", "labs", "laboratory", "laboratories"),
     "programmes": ("programmes", "programs offered", "intake", "degrees"),
     "overview": ("everything", "overview", "introduction", "about the department", "about the school",
@@ -205,6 +208,10 @@ def understand(question: str, today: date | None = None) -> Understanding:
             u.semester = current
             u.notes.append(f"the {u.batch_label} batch is in {ORDINAL[current]} sem now")
 
+    if not u.semester and not u.batch and u.topic in ("timetable", "exam"):
+        # "college kitne baje?" / "exam kab hai?": the session running now
+        u.session = session_label(start, today.month >= 7)
+        u.notes.append("no semester given, so the current session")
     if u.semester:
         odd = u.semester % 2 == 1
         if u.batch:

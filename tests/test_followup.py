@@ -65,3 +65,9 @@ def test_answers_to_english_letter_questions_are_asked_for_in_english_letters():
     system, user = build_prompt("canteen me kya milta hai?", [])
     assert user.rstrip().endswith("English or Hinglish.)")
     assert "classroom of that class" in system and "another department" in system
+
+
+def test_rewrite_prompt_asks_for_a_question_and_merges_corrections():
+    from rag.followup import REWRITE_PROMPT
+
+    assert "QUESTION" in REWRITE_PROMPT and "time table" in REWRITE_PROMPT

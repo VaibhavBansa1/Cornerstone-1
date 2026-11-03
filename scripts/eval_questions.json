@@ -787,6 +787,57 @@
     "not eligible",
     "cannot appear"
    ]
+  },
+  {
+   "id": "tim1",
+   "cat": "Syllabus, timetable, notices",
+   "q": "College kitne baje se kitne baje tak hai?",
+   "expect": "answer",
+   "any": [
+    "0?9[:.]00",
+    "9 ?am",
+    "0?6[:.]00",
+    "6 ?pm"
+   ],
+   "min_any": 2,
+   "not": [
+    "remedial"
+   ]
+  },
+  {
+   "id": "tim2",
+   "cat": "Syllabus, timetable, notices",
+   "q": "What are the class timings?",
+   "expect": "answer",
+   "any": [
+    "0?9[:.]00",
+    "9 ?am",
+    "0?6[:.]00",
+    "6 ?pm"
+   ],
+   "min_any": 2
+  },
+  {
+   "id": "fu4",
+   "cat": "Follow-up questions",
+   "history": [
+    {
+     "q": "College kitne baje se kitne baje??",
+     "a": "Sources mein college ke timings ke baare mein specific information nahi di gayi hai."
+    }
+   ],
+   "q": "Di hai time table mai",
+   "expect": "answer",
+   "any": [
+    "0?9[:.]00",
+    "9 ?am",
+    "0?6[:.]00",
+    "6 ?pm"
+   ],
+   "min_any": 2,
+   "not": [
+    "remedial"
+   ]
   }
  ]
 }
