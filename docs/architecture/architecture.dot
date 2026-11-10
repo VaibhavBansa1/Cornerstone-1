@@ -12,7 +12,7 @@ digraph architecture {
 
   // ---------- outside systems ----------
   site      [peripheries=2, label=<<B>MITS website</B><BR/><FONT POINT-SIZE="9">web.mitsgwalior.in — all IT dept pages<BR/>+ ~55 college-wide pages<BR/>+ linked PDFs / Google Drive files</FONT>>];
-  browser   [peripheries=2, label=<<B>Browser</B><BR/><FONT POINT-SIZE="9">student chat page · admin page</FONT>>];
+  browser   [peripheries=2, label=<<B>Browser</B>   [D19 D20]<BR/><FONT POINT-SIZE="9">student chat page · admin page<BR/>no login; keeps the last 3 turns itself</FONT>>];
   providers [peripheries=2, label=<<B>AI model — first one that works</B><BR/><FONT POINT-SIZE="9">OpenRouter · Groq · GitHub Models · Gemini<BR/>Anthropic · OpenAI · LM Studio · Ollama (local)</FONT>>];
 
   // ---------- INDEXING ----------
@@ -23,7 +23,7 @@ digraph architecture {
     read  [label=<<B>2 · Read text</B>   [D3]<BR/><FONT POINT-SIZE="9">HTML / PDF / DOCX → text<BR/>scanned pages → OCR (cached)</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/readers.py · ocr.py</FONT>>];
     name  [label=<<B>3 · Name &amp; date</B>   [D4 D5]<BR/><FONT POINT-SIZE="9">"CLICK HERE" → "V SEM · 2024-28 BATCH"<BR/>date: text › batch › file › server</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/link_labels.py · dates.py</FONT>>];
     chunk [label=<<B>4 · Chunk</B>   [D6]<BR/><FONT POINT-SIZE="9">~900-char pieces cut at paragraphs<BR/>+ one course-list piece per document</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/chunking.py · course_list.py</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">ingestion/build.py (runs 2–4)</FONT>>];
-    embed [label=<<B>5 · Embed + index</B>   [D7]<BR/><FONT POINT-SIZE="9">multilingual e5-small, GPU if present<BR/>→ FAISS vector index</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/embeddings.py · embed_index.py</FONT>>];
+    embed [label=<<B>5 · Embed + index</B>   [D7 D18]<BR/><FONT POINT-SIZE="9">multilingual e5-small, GPU if present<BR/>→ FAISS vector index (in memory, offline)</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/embeddings.py · embed_index.py</FONT>>];
     crawl -> read -> name -> chunk -> embed [weight=10];
   }
 
@@ -36,7 +36,7 @@ digraph architecture {
     d_up    [label=<<B>uploads/</B>   [D14]<BR/><FONT POINT-SIZE="9">admin-uploaded PDF / DOCX / TXT</FONT>>];
     d_proc  [label=<<B>processed/</B><BR/><FONT POINT-SIZE="9">chunks.jsonl<BR/>pdf_text_cache/ (OCR results)</FONT>>];
     d_index [label=<<B>index/</B><BR/><FONT POINT-SIZE="9">faiss.index · chunks_meta.jsonl<BR/>index_info.json (which model)</FONT>>];
-    d_log   [label=<<B>chat_log.db</B>   [D13]<BR/><FONT POINT-SIZE="9">written by the web server: counts &amp;<BR/>cited sources only — no question text</FONT>>];
+    d_log   [label=<<B>chat_log.db</B>   [D13 D21]<BR/><FONT POINT-SIZE="9">counts, cited sources, 👍/👎 votes<BR/>— never the question text</FONT>>];
     d_raw -> d_up -> d_proc -> d_index -> d_log [style=invis, weight=10];
   }
 
@@ -44,14 +44,15 @@ digraph architecture {
   subgraph cluster_answer {
     label=<<B>ANSWERING</B> (live, per question)<BR/><FONT POINT-SIZE="9" FACE="DejaVu Sans Mono">python -m web.app</FONT>>;
     style=rounded; color=black; penwidth=1.3; fontsize=12; margin=12; labeljust=l;
-    app    [label=<<B>Web server</B>   [D13 D14]<BR/><FONT POINT-SIZE="9">chat + admin API, saved copies,<BR/>upload → background rebuild</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">web/app.py · sources.py · chatlog.py</FONT>>];
-    under  [label=<<B>A · Understand question</B>   [D8]<BR/><FONT POINT-SIZE="9">"5th sem syllabus 2026" → 5th sem ·<BR/>2024-28 batch · July-Dec 2026 · syllabus</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/query_understanding.py</FONT>>];
-    search [label=<<B>B · Search</B>   [D9 D10]<BR/><FONT POINT-SIZE="9">keywords + meaning → merge → rerank<BR/>+ newer / right-batch / role boosts → top 6</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/retrieval.py · roles.py</FONT>>];
-    prompt [label=<<B>C · Build prompt</B>   [D11]<BR/><FONT POINT-SIZE="9">today's date · "understood as" · role timeline<BR/>dated sources, newest first · strict rules</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/pipeline.py</FONT>>];
+    app    [label=<<B>Web server</B>   [D13 D14 D16 D21]<BR/><FONT POINT-SIZE="9">chat + admin API, live progress, feedback,<BR/>saved copies, upload → background rebuild</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">web/app.py · sources.py · chatlog.py</FONT>>];
+    under  [label=<<B>A · Understand question</B>   [D8 D20 D24]<BR/><FONT POINT-SIZE="9">follow-up → full question; rules first,<BR/>AI only if they miss: "5th sem syllabus 2026"<BR/>→ 5th sem · 2024-28 batch · July-Dec 2026</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/query_understanding.py · question_ai.py · followup.py</FONT>>];
+    search [label=<<B>B · Search</B>   [D9 D10 D15 D23]<BR/><FONT POINT-SIZE="9">keywords + meaning → merge → rerank<BR/>+ newer / right-batch / role boosts → top 6<BR/>topic pages · documents labelled from their header</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/retrieval.py · roles.py · doc_labels.py</FONT>>];
+    prompt [label=<<B>C · Build prompt</B>   [D11 D22]<BR/><FONT POINT-SIZE="9">today's date · "understood as" · role timeline<BR/>dated sources, newest first · strict rules<BR/>short document on top → given whole</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/pipeline.py</FONT>>];
     llm    [label=<<B>D · Ask the AI</B>   [D12]<BR/><FONT POINT-SIZE="9">providers in order, skip rate-limited;<BR/>none left → show passages instead</FONT><BR/><FONT POINT-SIZE="9" COLOR="#555555" FACE="DejaVu Sans Mono">rag/llm/</FONT>>];
     app -> under -> search -> prompt -> llm [weight=10];
   }
 
+  checks [shape=note, width=2.7, fontsize=10, label=<<B>Checks</B>   [D17 D25]<BR/><FONT POINT-SIZE="9">graded test questions + source check<BR/>(scripts/eval.py) · pytest (tests/)</FONT>>];
   cfg [shape=note, width=2.2, fontsize=10, label=<<B>config.py</B><BR/><FONT POINT-SIZE="9">every setting in one place,<BR/>each overridable by env variable</FONT>>];
 
   // ---------- rows: matching steps side by side ----------
@@ -62,6 +63,7 @@ digraph architecture {
   { rank=same; chunk; d_index; prompt; }
   { rank=same; embed; d_log; llm; }
   site -> cfg -> browser [style=invis];
+  d_log -> checks [style=invis];
   crawl -> d_raw -> app [style=invis];
 
   // ---------- data flow ----------
