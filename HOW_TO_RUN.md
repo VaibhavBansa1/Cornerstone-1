@@ -50,8 +50,8 @@ A folder that came without `.git` can be linked to GitHub like this (needs Git; 
 ```powershell
 git init
 git remote add origin https://github.com/VaibhavBansa1/MITS-Help-Desk.git
-git fetch origin claude/modular-date-aware-rag
-git checkout -f -t origin/claude/modular-date-aware-rag
+git fetch origin main
+git checkout -f -t origin/main
 ```
 
 ## The same steps by hand
