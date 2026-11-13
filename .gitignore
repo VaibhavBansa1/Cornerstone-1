@@ -28,3 +28,6 @@ models/
 *.err
 *.zip
 data/try*
+
+# helper files from development sessions (see data/scratch/README.txt)
+data/scratch/
